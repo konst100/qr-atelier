@@ -24,7 +24,8 @@ export function parseLibrary(raw: string | null): SavedQr[] {
         typeof record.updatedAt !== 'string' || !Number.isFinite(Date.parse(record.updatedAt)) || !record.draft || typeof record.draft !== 'object') throw new Error('Invalid record');
     const value = { ...initialDraft, ...(record.draft as Partial<QrDraft>) } as QrDraft;
     for (const key of Object.keys(initialDraft) as Array<keyof QrDraft>) {
-      if (typeof value[key] !== 'string' || value[key].length > 1400) throw new Error('Invalid field');
+      const maxLength = key === 'logoDataUrl' ? 260_000 : 1400;
+      if (typeof value[key] !== 'string' || value[key].length > maxLength) throw new Error('Invalid field');
     }
     if (value.logoDataUrl && (!value.logoDataUrl.startsWith('data:image/') || value.logoDataUrl.length > 260_000)) throw new Error('Invalid logo');
     if (!['url', 'text', 'contact'].includes(value.kind) || !['square', 'rounded'].includes(value.shape) || buildPayload(value).error) throw new Error('Invalid payload');
