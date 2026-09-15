@@ -92,12 +92,17 @@ export async function verifyPassword(password: string, digest: PasswordDigest): 
   return difference === 0;
 }
 
+export async function hashSessionToken(token: string): Promise<string> {
+  const api = cryptoApi();
+  return toBase64Url(new Uint8Array(await api.subtle.digest('SHA-256', encoder.encode(token))));
+}
+
 export async function createSession(userId: string, lifetimeMs = 1000 * 60 * 60 * 24 * 30): Promise<{ token: string; data: SessionData }> {
   if (!/^[a-zA-Z0-9_-]{8,80}$/.test(userId)) throw new Error('Invalid user id');
   const api = cryptoApi();
   const tokenBytes = new Uint8Array(32);
   api.getRandomValues(tokenBytes);
   const token = toBase64Url(tokenBytes);
-  const tokenHash = toBase64Url(new Uint8Array(await api.subtle.digest('SHA-256', encoder.encode(token))));
+  const tokenHash = await hashSessionToken(token);
   return { token, data: { tokenHash, userId, expiresAt: new Date(Date.now() + lifetimeMs).toISOString() } };
 }

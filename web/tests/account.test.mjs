@@ -4,6 +4,7 @@ import { createSession, hashPassword, normalizeEmail, validateRegistration, veri
 import { readFile } from 'node:fs/promises';
 import { AccountServiceError, authenticateAccount, registerAccount } from '../server/account-service.ts';
 import { handleAuthRequest } from '../server/auth-api.ts';
+import { handleQrRequest } from '../server/qr-api.ts';
 
 test('registration normalizes email and validates a strong password', () => {
   assert.deepEqual(validateRegistration({ email: '  USER@Example.COM ', password: 'correct horse battery staple' }), {
@@ -109,4 +110,48 @@ test('auth API rejects malformed input, duplicate registration and wrong credent
     method: 'POST', body: JSON.stringify({ email: 'owner@example.com', password: 'wrong password' }),
   }), deps);
   assert.equal(wrong.status, 401);
+});
+
+test('QR API authenticates by hashed session and scopes records to the user workspace', async () => {
+  const accounts = new Map();
+  const sessions = new Map();
+  const qrs = new Map();
+  const destinations = new Map();
+  const workspaceId = 'workspace_a';
+  const store = {
+    findByEmail: async (email) => accounts.get(email) ?? null,
+    create: async (account) => { accounts.set(account.email, account); },
+  };
+  const qrStore = {
+    createQr: async (record) => { qrs.set(record.id, record); },
+    getQrInWorkspace: async (workspace, id) => qrs.get(id)?.workspaceId === workspace ? qrs.get(id) : null,
+    getQrBySlug: async (slug) => [...qrs.values()].find((qr) => qr.slug === slug) ?? null,
+    listQrInWorkspace: async (workspace) => [...qrs.values()].filter((qr) => qr.workspaceId === workspace),
+    createDestination: async (destination) => { destinations.set(destination.id, destination); },
+    listDestinations: async (qrCodeId) => [...destinations.values()].filter((destination) => destination.qrCodeId === qrCodeId),
+  };
+  const authDeps = {
+    accounts: store, sessions: { save: async (session) => { sessions.set(session.tokenHash, session); } },
+    now: () => new Date('2026-09-15T10:00:00.000Z'),
+  };
+  const login = await handleAuthRequest(new Request('https://app.test/api/auth/register', {
+    method: 'POST', body: JSON.stringify({ email: 'owner@example.com', password: 'correct horse battery staple' }),
+  }), authDeps);
+  const cookie = login.headers.get('Set-Cookie').split(';')[0];
+  const deps = {
+    sessions: { find: async (tokenHash) => sessions.get(tokenHash) ?? null },
+    workspaces: { defaultForUser: async () => ({ id: workspaceId, name: 'Owner workspace' }) },
+    qrs: qrStore,
+    now: () => new Date('2026-09-15T10:00:00.000Z'),
+  };
+  const created = await handleQrRequest(new Request('https://app.test/api/qr', {
+    method: 'POST', headers: { Cookie: cookie },
+    body: JSON.stringify({ id: 'qr_12345', slug: 'summer-2026', kind: 'url', name: 'Summer', destinationUrl: 'https://example.com' }),
+  }), deps);
+  assert.equal(created.status, 201);
+  const listed = await handleQrRequest(new Request('https://app.test/api/qr', { headers: { Cookie: cookie } }), deps);
+  assert.equal((await listed.json()).qrCodes.length, 1);
+  assert.equal((await handleQrRequest(new Request('https://app.test/api/qr'), deps)).status, 401);
+  assert.equal((await handleQrRequest(new Request('https://app.test/api/qr', { method: 'DELETE', headers: { Cookie: cookie } }), deps)).status, 405);
+  assert.equal((await handleQrRequest(new Request('https://app.test/api/qr', { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ slug: 'bad', kind: 'url', name: 'Bad', destinationUrl: 'javascript:alert(1)' }) }), deps)).status, 400);
 });
