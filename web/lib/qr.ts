@@ -4,12 +4,12 @@ export type QrDraft = {
   kind: QrKind; name: string; url: string; text: string;
   ssid: string; password: string; security: 'WPA' | 'nopass';
   firstName: string; lastName: string; phone: string; email: string; organization: string;
-  color: string; shape: QrShape;
+  color: string; shape: QrShape; logoDataUrl: string;
 };
 export type QrError = 'urlRequired' | 'urlInvalid' | 'textRequired' | 'ssidRequired' | 'passwordRequired' | 'contactRequired' | 'emailInvalid' | 'tooLong' | 'colorInvalid';
 export const initialDraft: QrDraft = {
   kind: 'url', name: '', url: 'https://example.com', text: '', ssid: '', password: '', security: 'WPA',
-  firstName: '', lastName: '', phone: '', email: '', organization: '', color: '#172554', shape: 'square',
+  firstName: '', lastName: '', phone: '', email: '', organization: '', color: '#172554', shape: 'square', logoDataUrl: '',
 };
 const escapeWifi = (value: string) => value.replace(/[\\;,:\"]/g, '\\$&');
 const escapeVcard = (value: string) => value.replace(/\\/g, '\\\\').replace(/\r\n|\r|\n/g, '\\n').replace(/[;,]/g, '\\$&');
@@ -58,7 +58,7 @@ export function buildPayload(draft: QrDraft): { payload: string; error?: QrError
   if (new TextEncoder().encode(payload).length > 900) return bad('tooLong');
   return { payload };
 }
-export function qrOptions(data: string, color: string, shape: QrShape, size = 1000) {
+export function qrOptions(data: string, color: string, shape: QrShape, size = 1000, logoDataUrl = '') {
   return {
     // The bundled encoder consumes byte strings. Encode UTF-8 explicitly so
     // Cyrillic, German characters and emoji survive decoding unchanged.
@@ -70,6 +70,10 @@ export function qrOptions(data: string, color: string, shape: QrShape, size = 10
     cornersSquareOptions: { color, type: 'square' as const },
     cornersDotOptions: { color, type: 'square' as const },
     backgroundOptions: { color: '#ffffff' },
+    ...(logoDataUrl ? {
+      image: logoDataUrl,
+      imageOptions: { hideBackgroundDots: true, imageSize: 0.24, margin: 8, crossOrigin: 'anonymous' as const },
+    } : {}),
   };
 }
 

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SqlSessionStore, SqlWorkspaceAccess } from '../server/sql-store.ts';
+import { SqlScanStore, SqlSessionStore, SqlWorkspaceAccess } from '../server/sql-store.ts';
 import { handleRedirectRequest } from '../server/redirect-api.ts';
 import { handleAppRequest } from '../server/router.ts';
+import { handleQrRequest } from '../server/qr-api.ts';
+import { handleStatsRequest } from '../server/stats-api.ts';
 
 test('SQL session and workspace adapters map rows without provider coupling', async () => {
   const calls = [];
@@ -60,4 +62,68 @@ test('app router dispatches auth, QR cabinet, and redirect paths', async () => {
   assert.equal((await handleAppRequest(new Request('https://app.test/api/qr'), deps)).status, 401);
   assert.equal((await handleAppRequest(new Request('https://app.test/r/missing-1'), deps)).status, 404);
   assert.equal((await handleAppRequest(new Request('https://app.test/unknown'), deps)).status, 404);
+});
+
+test('QR cabinet updates, pauses, archives, and rotates the destination', async () => {
+  const sessions = new Map([['session_hash', { tokenHash: 'session_hash', userId: 'user_1', expiresAt: '2026-09-15T11:00:00.000Z' }]]);
+  const qr = {
+    id: 'qr_1', workspaceId: 'workspace_1', slug: 'summer-2026', kind: 'url', name: 'Summer',
+    status: 'active', designJson: '{}', folderId: null, campaignId: null, expiresAt: null,
+    createdAt: '2026-09-15T09:00:00.000Z', updatedAt: '2026-09-15T09:00:00.000Z',
+  };
+  const destinations = [];
+  const qrs = {
+    getQrInWorkspace: async (workspaceId, id) => workspaceId === qr.workspaceId && id === qr.id ? qr : null,
+    getQrBySlug: async () => qr,
+    listQrInWorkspace: async () => [qr],
+    createQr: async () => {},
+    updateQr: async (next) => Object.assign(qr, next),
+    createDestination: async (destination) => { destinations.push(destination); },
+    listDestinations: async () => destinations,
+  };
+  const deps = {
+    sessions: { find: async (hash) => sessions.get(hash) ?? null },
+    workspaces: { defaultForUser: async () => ({ id: qr.workspaceId, name: 'Owner workspace' }) },
+    qrs,
+    now: () => new Date('2026-09-15T10:00:00.000Z'),
+  };
+  const cookie = 'qr_session=raw-token';
+  // hashSessionToken('raw-token') is intentionally supplied by the dependency below.
+  deps.sessions.find = async () => [...sessions.values()][0];
+  const patchResponse = await handleQrRequest(new Request('https://app.test/api/qr/qr_1', {
+    method: 'PATCH', headers: { Cookie: cookie },
+    body: JSON.stringify({ name: ' Updated ', status: 'paused', destinationUrl: 'https://example.com/updated' }),
+  }), deps);
+  assert.equal(patchResponse.status, 200);
+  assert.equal(qr.name, 'Updated');
+  assert.equal(qr.status, 'paused');
+  assert.equal(destinations.length, 1);
+  const deleted = await handleQrRequest(new Request('https://app.test/api/qr/qr_1', { method: 'DELETE', headers: { Cookie: cookie } }), deps);
+  assert.equal(deleted.status, 204);
+  assert.equal(qr.status, 'archived');
+});
+
+test('scan statistics aggregate by day and stay scoped to the QR workspace', async () => {
+  const calls = [];
+  const client = {
+    query: async (sql, params) => {
+      calls.push({ sql, params });
+      if (sql.includes('SELECT scans')) return [{ scans: 2, device_mobile: 1, device_desktop: 1 }];
+      if (sql.includes('SELECT day')) return [{ day: '2026-09-15', scans: 3, device_mobile: 2, device_desktop: 1 }];
+      return [];
+    },
+  };
+  const scanStore = new SqlScanStore(client);
+  await scanStore.record({ qrCodeId: 'qr_1', day: '2026-09-15', device: 'mobile' });
+  assert.deepEqual(await scanStore.listDaily('qr_1', '2026-09-01', '2026-09-30'), [{ day: '2026-09-15', scans: 3, deviceMobile: 2, deviceDesktop: 1 }]);
+  const stats = await handleStatsRequest(new Request('https://app.test/api/qr/qr_1/stats?from=2026-09-01&to=2026-09-30', { headers: { Cookie: 'qr_session=raw-token' } }), {
+    sessions: { find: async () => ({ tokenHash: 'hash', userId: 'user_1', expiresAt: '2026-10-01T00:00:00.000Z' }) },
+    workspaces: { defaultForUser: async () => ({ id: 'workspace_1', name: 'Owner workspace' }) },
+    qrs: { getQrInWorkspace: async () => ({ id: 'qr_1' }), listDestinations: async () => [] },
+    scans: scanStore,
+    now: () => new Date('2026-09-15T10:00:00.000Z'),
+  });
+  assert.equal(stats.status, 200);
+  assert.equal((await stats.json()).total, 3);
+  assert.match(calls.at(-1).sql, /day >=/);
 });

@@ -1,7 +1,9 @@
-import { resolveDestination, type QrStore } from './qr-service.ts';
+import { resolveQrTarget, type QrStore } from './qr-service.ts';
+import { recordScan, type ScanStore } from './scan-service.ts';
 
 export type RedirectApiDependencies = {
   qrs: QrStore;
+  scans?: ScanStore;
   now?: () => Date;
 };
 
@@ -24,17 +26,19 @@ export async function handleRedirectRequest(request: Request, dependencies: Redi
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
   }
-  let destination: string | null;
+  let target: Awaited<ReturnType<typeof resolveQrTarget>>;
   try {
-    destination = await resolveDestination(dependencies.qrs, decodeURIComponent(match[1]), dependencies.now?.() ?? new Date());
+    const now = dependencies.now?.() ?? new Date();
+    target = await resolveQrTarget(dependencies.qrs, decodeURIComponent(match[1]), now);
+    if (target) await recordScan(dependencies.scans, target.qr.id, request, now);
   } catch {
-    destination = null;
+    target = null;
   }
-  if (!destination) return missing();
+  if (!target) return missing();
   return new Response(null, {
     status: 302,
     headers: {
-      Location: destination,
+      Location: target.destination.destinationUrl,
       'Cache-Control': 'no-store',
       'Referrer-Policy': 'no-referrer',
     },

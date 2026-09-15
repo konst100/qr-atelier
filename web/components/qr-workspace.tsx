@@ -8,7 +8,7 @@ import { QrPreview } from '@/components/qr-preview';
 import { QrLibrary } from '@/components/qr-library';
 import { buildPayload, initialDraft, type QrDraft } from '@/lib/qr';
 import { LIBRARY_KEY, LANGUAGE_KEY, parseLibrary, savedDraft, type SavedQr } from '@/lib/storage';
-import { translations, type Language } from '@/lib/translations';
+import { languageOptions, translations, type Language } from '@/lib/translations';
 
 const colors = ['#172554', '#111827', '#1d4ed8', '#6d28d9', '#047857', '#9f1239'];
 type View = 'create' | 'library';
@@ -27,7 +27,7 @@ export function QrWorkspace() {
   useEffect(() => {
     try {
       const storedLanguage = window.localStorage.getItem(LANGUAGE_KEY);
-      if (storedLanguage === 'ru' || storedLanguage === 'de') setLanguage(storedLanguage);
+      if (storedLanguage && languageOptions.some((option) => option.code === storedLanguage)) setLanguage(storedLanguage as Language);
       setRecords(parseLibrary(window.localStorage.getItem(LIBRARY_KEY)));
     } catch {
       setMessage(translations.ru.storageReadError);
@@ -35,6 +35,13 @@ export function QrWorkspace() {
   }, []);
 
   function update<K extends keyof QrDraft>(key: K, value: QrDraft[K]) { setDraft((prev) => ({ ...prev, [key]: value })); }
+  function chooseLogo(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith('image/') || file.size > 200_000) { setMessage(t.logoError); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === 'string') update('logoDataUrl', reader.result); };
+    reader.readAsDataURL(file);
+  }
   function changeLanguage(value: Language) {
     setLanguage(value);
     document.documentElement.lang = value;
@@ -68,7 +75,7 @@ export function QrWorkspace() {
         <button className={view === 'library' ? 'active' : ''} onClick={() => setView('library')}><LibraryBig size={16}/>{t.library}{records.length > 0 && <span>{records.length}</span>}</button>
       </nav>
       <span className="header-description">{t.workspace}</span>
-      <div className="language-picker" role="group" aria-label={t.language}><Globe2 size={16} /><button aria-pressed={language === 'ru'} onClick={() => changeLanguage('ru')}>RU</button><span>/</span><button aria-pressed={language === 'de'} onClick={() => changeLanguage('de')}>DE</button></div>
+      <label className="language-picker" aria-label={t.language}><Globe2 size={16} /><select value={language} onChange={(event) => changeLanguage(event.target.value as Language)}>{languageOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label>
     </header>
     <main className="main-content">
       {view === 'library' ? <section className="library-view"><div className="library-heading"><div><p className="eyebrow"><span />QR ATELIER / LIBRARY</p><h1>{t.libraryTitle}</h1><p className="page-subtitle">{t.librarySubtitle}</p></div><Button variant="outline" onClick={resetDraft}><Sparkles size={17}/>{t.newCode}</Button></div><QrLibrary records={records} language={language} onNew={resetDraft} onEdit={edit} onDelete={remove}/></section> : <>
@@ -78,10 +85,11 @@ export function QrWorkspace() {
           <section className="editor-section design-section"><div className="section-title"><span className="step-number">02</span><div><h2>{t.design}</h2></div><Sparkles size={20} /></div>
             <div className="field"><label>{t.color}</label><div className="color-row">{colors.map((color) => <button key={color} type="button" style={{ background: color }} className={`color-swatch ${draft.color === color ? 'selected' : ''}`} aria-label={color} aria-pressed={draft.color === color} onClick={() => update('color', color)} />)}<label className="custom-color"><input aria-label={t.color} type="color" value={draft.color} onChange={(event) => update('color', event.target.value)} /><span>{draft.color.toUpperCase()}</span></label></div></div>
             <div className="field"><label>{t.shape}</label><div className="shape-row">{(['square', 'rounded'] as const).map((shape) => <Button key={shape} type="button" variant="outline" className={draft.shape === shape ? 'shape-button selected' : 'shape-button'} aria-pressed={draft.shape === shape} onClick={() => update('shape', shape)}><span className={`shape-sample ${shape}`}>{Array.from({length: 9}, (_, i) => <i key={i} />)}</span>{t[shape]}</Button>)}</div></div>
+            <div className="field logo-field"><label htmlFor="qr-logo">{t.logo}</label><div className="logo-picker"><input id="qr-logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => chooseLogo(event.target.files?.[0])} /><span>{draft.logoDataUrl ? t.logoReady : t.logoHint}</span>{draft.logoDataUrl && <Button type="button" variant="ghost" onClick={() => update('logoDataUrl', '')}>{t.logoRemove}</Button>}</div></div>
           </section>
           <section className="save-section"><div className="field"><label htmlFor="qr-name">{t.name}</label><input id="qr-name" className="save-name-input" value={draft.name} onChange={(event) => update('name', event.target.value)} maxLength={80} placeholder={t.namePlaceholder}/></div><Button className="primary-button save-button" onClick={save} disabled={!loaded || draft.kind === 'wifi'}><LibraryBig size={17}/>{editingId ? t.update : t.save}</Button>{draft.kind === 'wifi' && <p className="field-hint save-warning">{t.wifiNotSaved}</p>}</section>
           <div className="static-notice"><ShieldCheck size={21} /><div><strong>{t.static}</strong><p>{t.staticHint}</p></div></div>
-        </div><QrPreview payload={result.payload} color={draft.color} shape={draft.shape} name={draft.name} language={language} validation={result.error ? t[result.error] : undefined} onMessage={setMessage}/></div>
+        </div><QrPreview payload={result.payload} color={draft.color} shape={draft.shape} logoDataUrl={draft.logoDataUrl} name={draft.name} language={language} validation={result.error ? t[result.error] : undefined} onMessage={setMessage}/></div>
       </>}
       <footer className="workspace-footer"><ShieldCheck size={15}/><span>{t.privacy}</span><span className="footer-brand">QR Atelier</span></footer>
       {message && <div role="status" className="toast-message" onClick={() => setMessage('')}>{message}</div>}

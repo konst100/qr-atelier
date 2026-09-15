@@ -1,5 +1,10 @@
-export type Language = 'ru' | 'de';
-export const translations = {
+export type Language = 'ru' | 'de' | 'en' | 'fr' | 'es' | 'it' | 'pt' | 'nl' | 'pl' | 'tr' | 'zh';
+export const languageOptions: Array<{ code: Language; label: string }> = [
+  { code: 'ru', label: 'Русский' }, { code: 'de', label: 'Deutsch' }, { code: 'en', label: 'English' },
+  { code: 'fr', label: 'Français' }, { code: 'es', label: 'Español' }, { code: 'it', label: 'Italiano' },
+  { code: 'pt', label: 'Português' }, { code: 'nl', label: 'Nederlands' }, { code: 'pl', label: 'Polski' }, { code: 'tr', label: 'Türkçe' }, { code: 'zh', label: '中文' },
+];
+const baseTranslations = {
   ru: {
     workspace: 'Рабочее пространство', create: 'Создать QR-код', library: 'Мои QR-коды',
     eyebrow: 'ИДЕЯ. ССЫЛКА. СКАН.', title: 'Маленький код.', titleAccent: 'Большие возможности.',
@@ -28,6 +33,7 @@ export const translations = {
     deleteTitle: 'Удалить QR-код?', deleteText: 'Он исчезнет из библиотеки этого браузера. Уже скачанные статические коды продолжат работать.',
     cancel: 'Отмена', removed: 'QR-код удалён', newCode: 'Новый код', language: 'Язык интерфейса',
     localBadge: 'На этом устройстве', fileHint: 'PNG — для экрана · SVG — для печати',
+    logo: 'Логотип в центре', logoHint: 'PNG, JPG, WEBP или SVG до 200 КБ', logoReady: 'Логотип добавлен', logoRemove: 'Убрать', logoError: 'Выберите изображение до 200 КБ.',
     urlRequired: 'Введите адрес сайта.', urlInvalid: 'Введите корректную ссылку http:// или https:// без логина и пароля.',
     textRequired: 'Добавьте текст для QR-кода.', ssidRequired: 'Введите название сети.', passwordRequired: 'Введите пароль сети.',
     contactRequired: 'Укажите имя или фамилию.', emailInvalid: 'Проверьте адрес электронной почты.',
@@ -61,9 +67,30 @@ export const translations = {
     deleteTitle: 'QR-Code löschen?', deleteText: 'Er wird aus der Bibliothek dieses Browsers entfernt. Bereits heruntergeladene statische Codes funktionieren weiterhin.',
     cancel: 'Abbrechen', removed: 'QR-Code gelöscht', newCode: 'Neuer Code', language: 'Sprache',
     localBadge: 'Auf diesem Gerät', fileHint: 'PNG — für Bildschirme · SVG — für den Druck',
+    logo: 'Logo in der Mitte', logoHint: 'PNG, JPG, WEBP oder SVG bis 200 KB', logoReady: 'Logo hinzugefügt', logoRemove: 'Entfernen', logoError: 'Wählen Sie ein Bild bis 200 KB.',
     urlRequired: 'Geben Sie eine Website-Adresse ein.', urlInvalid: 'Geben Sie einen gültigen http:// oder https:// Link ohne Benutzername und Passwort ein.',
     textRequired: 'Fügen Sie einen Text hinzu.', ssidRequired: 'Geben Sie den Netzwerknamen ein.', passwordRequired: 'Geben Sie das Netzwerkpasswort ein.',
     contactRequired: 'Geben Sie einen Vor- oder Nachnamen ein.', emailInvalid: 'Prüfen Sie die E-Mail-Adresse.',
     tooLong: 'Zu viele Daten. Kürzen Sie den Inhalt auf maximal 900 Bytes.', colorInvalid: 'Diese Farbe ist zu hell. Wählen Sie eine dunklere Farbe für zuverlässiges Scannen.',
   },
+};
+
+type Translation = typeof baseTranslations.ru;
+const locale = (overrides: Partial<Translation>): Translation => ({ ...baseTranslations.ru, ...overrides });
+
+// The message shape is shared, so adding a locale never breaks a screen. The
+// most visible labels are translated here; the remaining copy falls back to RU
+// until the corresponding professional translation is reviewed.
+export const translations: Record<Language, Translation> = {
+  ru: baseTranslations.ru,
+  de: baseTranslations.de,
+  en: locale({ workspace: 'Workspace', create: 'Create QR code', library: 'My QR codes', content: 'Content', design: 'Design', preview: 'Preview', download: 'Download', save: 'Save code', update: 'Save changes', logo: 'Center logo', logoHint: 'PNG, JPG, WEBP or SVG up to 200 KB', logoReady: 'Logo added', logoRemove: 'Remove', logoError: 'Choose an image up to 200 KB.', language: 'Interface language' }),
+  fr: locale({ workspace: 'Espace de travail', create: 'Créer un QR code', library: 'Mes QR codes', content: 'Contenu', design: 'Design', preview: 'Aperçu', download: 'Télécharger', save: 'Enregistrer le code', logo: 'Logo au centre', language: 'Langue de l’interface' }),
+  es: locale({ workspace: 'Espacio de trabajo', create: 'Crear código QR', library: 'Mis códigos QR', content: 'Contenido', design: 'Diseño', preview: 'Vista previa', download: 'Descargar', save: 'Guardar código', logo: 'Logo central', language: 'Idioma de la interfaz' }),
+  it: locale({ workspace: 'Area di lavoro', create: 'Crea codice QR', library: 'I miei codici QR', content: 'Contenuto', design: 'Design', preview: 'Anteprima', download: 'Scarica', save: 'Salva codice', logo: 'Logo centrale', language: 'Lingua dell’interfaccia' }),
+  pt: locale({ workspace: 'Área de trabalho', create: 'Criar código QR', library: 'Meus códigos QR', content: 'Conteúdo', design: 'Design', preview: 'Pré-visualização', download: 'Baixar', save: 'Salvar código', logo: 'Logo central', language: 'Idioma da interface' }),
+  nl: locale({ workspace: 'Werkruimte', create: 'QR-code maken', library: 'Mijn QR-codes', content: 'Inhoud', design: 'Ontwerp', preview: 'Voorbeeld', download: 'Downloaden', save: 'Code opslaan', logo: 'Logo in het midden', language: 'Interfacetaal' }),
+  pl: locale({ workspace: 'Obszar roboczy', create: 'Utwórz kod QR', library: 'Moje kody QR', content: 'Treść', design: 'Wygląd', preview: 'Podgląd', download: 'Pobierz', save: 'Zapisz kod', logo: 'Logo na środku', language: 'Język interfejsu' }),
+  tr: locale({ workspace: 'Çalışma alanı', create: 'QR kodu oluştur', library: 'QR kodlarım', content: 'İçerik', design: 'Tasarım', preview: 'Önizleme', download: 'İndir', save: 'Kodu kaydet', logo: 'Ortada logo', language: 'Arayüz dili' }),
+  zh: locale({ workspace: '工作区', create: '创建二维码', library: '我的二维码', content: '内容', design: '设计', preview: '预览', download: '下载', save: '保存二维码', logo: '中心标志', language: '界面语言', logoHint: 'PNG、JPG、WEBP 或 SVG，最大 200 KB', logoReady: '已添加标志', logoRemove: '移除', logoError: '请选择不超过 200 KB 的图片。' }),
 };

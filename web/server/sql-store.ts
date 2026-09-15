@@ -2,6 +2,7 @@ import type { AccountStore, AccountRecord } from './account-service.ts';
 import type { PasswordDigest } from '../lib/account.ts';
 import type { QrDestination, QrRecord, QrStore } from './qr-service.ts';
 import type { SessionData } from '../lib/account.ts';
+import type { ScanRecord, ScanStore } from './scan-service.ts';
 
 export type SqlValue = string | number | null;
 export type SqlRow = Record<string, unknown>;
@@ -128,6 +129,17 @@ export class SqlQrStore implements QrStore {
     );
   }
 
+  async updateQr(record: QrRecord): Promise<void> {
+    await this.client.query(
+      `UPDATE qr_codes SET slug = ?, kind = ?, name = ?, status = ?, design_json = ?,
+       folder_id = ?, campaign_id = ?, expires_at = ?, updated_at = ?
+       WHERE workspace_id = ? AND id = ?`,
+      [record.slug, record.kind, record.name, record.status, record.designJson,
+        record.folderId, record.campaignId, record.expiresAt, record.updatedAt,
+        record.workspaceId, record.id],
+    );
+  }
+
   async getQrInWorkspace(workspaceId: string, id: string): Promise<QrRecord | null> {
     const rows = await this.client.query(
       `SELECT ${qrColumns} FROM qr_codes WHERE workspace_id = ? AND id = ? LIMIT 1`,
@@ -233,5 +245,51 @@ export class SqlWorkspaceAccess {
     );
     const row = rows[0];
     return row ? { id: stringValue(row, 'id'), name: stringValue(row, 'name') } : null;
+  }
+}
+
+export class SqlScanStore implements ScanStore {
+  private readonly client: SqlClient;
+
+  constructor(client: SqlClient) {
+    this.client = client;
+  }
+
+  async record(scan: ScanRecord): Promise<void> {
+    const rows = await this.client.query(
+      `SELECT scans, device_mobile, device_desktop FROM scan_daily
+       WHERE qr_code_id = ? AND day = ? LIMIT 1`,
+      [scan.qrCodeId, scan.day],
+    );
+    if (rows[0]) {
+      const scans = numberValue(rows[0], 'scans') + 1;
+      const mobile = numberValue(rows[0], 'device_mobile') + (scan.device === 'mobile' ? 1 : 0);
+      const desktop = numberValue(rows[0], 'device_desktop') + (scan.device === 'desktop' ? 1 : 0);
+      await this.client.query(
+        `UPDATE scan_daily SET scans = ?, device_mobile = ?, device_desktop = ?
+         WHERE qr_code_id = ? AND day = ?`,
+        [scans, mobile, desktop, scan.qrCodeId, scan.day],
+      );
+      return;
+    }
+    await this.client.query(
+      `INSERT INTO scan_daily (qr_code_id, day, scans, device_mobile, device_desktop)
+       VALUES (?, ?, ?, ?, ?)`,
+      [scan.qrCodeId, scan.day, 1, scan.device === 'mobile' ? 1 : 0, scan.device === 'desktop' ? 1 : 0],
+    );
+  }
+
+  async listDaily(qrCodeId: string, from: string, to: string) {
+    const rows = await this.client.query(
+      `SELECT day, scans, device_mobile, device_desktop FROM scan_daily
+       WHERE qr_code_id = ? AND day >= ? AND day <= ? ORDER BY day ASC`,
+      [qrCodeId, from, to],
+    );
+    return rows.map((row) => ({
+      day: stringValue(row, 'day'),
+      scans: numberValue(row, 'scans'),
+      deviceMobile: numberValue(row, 'device_mobile'),
+      deviceDesktop: numberValue(row, 'device_desktop'),
+    }));
   }
 }

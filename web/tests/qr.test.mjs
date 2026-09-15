@@ -32,3 +32,9 @@ test('bounds payload bytes and protects contrast and quiet zone', () => {
   assert.ok(contrastOnWhite('#172554') > 10);
   assert.equal(qrOptions('test', '#172554', 'square').margin, 140);
 });
+test('adds a center logo only when a local image is supplied', () => {
+  const logo = 'data:image/png;base64,AAAA';
+  assert.equal(qrOptions('test', '#172554', 'rounded', 1000, logo).image, logo);
+  assert.equal(qrOptions('test', '#172554', 'rounded').image, undefined);
+  assert.equal(qrOptions('test', '#172554', 'rounded', 1000, logo).imageOptions.imageSize, 0.24);
+});

@@ -5,14 +5,14 @@ import { Button } from '@/components/ui/button';
 import { normalizeQrSvg, qrOptions, type QrShape } from '@/lib/qr';
 import { translations, type Language } from '@/lib/translations';
 
-type Props = { payload: string; color: string; shape: QrShape; language: Language; name: string; validation?: string; onMessage: (text: string) => void };
-export function QrPreview({ payload, color, shape, language, name, validation, onMessage }: Props) {
+type Props = { payload: string; color: string; shape: QrShape; logoDataUrl: string; language: Language; name: string; validation?: string; onMessage: (text: string) => void };
+export function QrPreview({ payload, color, shape, logoDataUrl, language, name, validation, onMessage }: Props) {
   const mount = useRef<HTMLDivElement>(null);
   const instance = useRef<import('qr-code-styling').default | null>(null);
   const [readyKey, setReadyKey] = useState('');
   const [failedKey, setFailedKey] = useState('');
   const [downloading, setDownloading] = useState(false);
-  const key = JSON.stringify([payload, color, shape]);
+  const key = JSON.stringify([payload, color, shape, logoDataUrl]);
   const t = translations[language];
   const ready = !!payload && readyKey === key;
   useEffect(() => {
@@ -25,7 +25,7 @@ export function QrPreview({ payload, color, shape, language, name, validation, o
     const timer = setTimeout(async () => {
       try {
         const { default: QRCodeStyling } = await import('qr-code-styling');
-        const qr = new QRCodeStyling(qrOptions(payload, color, shape));
+        const qr = new QRCodeStyling(qrOptions(payload, color, shape, 1000, logoDataUrl));
         qr.applyExtension(normalizeQrSvg);
         await qr.getRawData('svg');
         if (cancelled || !mount.current) return;
@@ -35,7 +35,7 @@ export function QrPreview({ payload, color, shape, language, name, validation, o
       } catch { if (!cancelled) setFailedKey(key); }
     }, 180);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [payload, color, shape, key]);
+  }, [payload, color, shape, logoDataUrl, key]);
   async function download(extension: 'png' | 'svg') {
     if (!ready || !instance.current || downloading) return;
     setDownloading(true);

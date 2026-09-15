@@ -26,6 +26,7 @@ export type QrDestination = {
 
 export type QrStore = {
   createQr(record: QrRecord): Promise<void>;
+  updateQr(record: QrRecord): Promise<void>;
   getQrInWorkspace(workspaceId: string, id: string): Promise<QrRecord | null>;
   getQrBySlug(slug: string): Promise<QrRecord | null>;
   listQrInWorkspace(workspaceId: string): Promise<QrRecord[]>;
@@ -113,7 +114,9 @@ export async function addDestination(
   return destination;
 }
 
-export async function resolveDestination(store: QrStore, slugInput: string, now = new Date()): Promise<string | null> {
+export type ResolvedQr = { qr: QrRecord; destination: QrDestination };
+
+export async function resolveQrTarget(store: QrStore, slugInput: string, now = new Date()): Promise<ResolvedQr | null> {
   const slug = validateSlug(slugInput);
   const qr = await store.getQrBySlug(slug);
   if (!qr || qr.status !== 'active' || (qr.expiresAt && new Date(qr.expiresAt) <= now)) return null;
@@ -121,5 +124,9 @@ export async function resolveDestination(store: QrStore, slugInput: string, now 
   const current = destinations
     .filter((destination) => new Date(destination.startsAt) <= now && (!destination.endsAt || new Date(destination.endsAt) > now))
     .sort((a, b) => b.startsAt.localeCompare(a.startsAt))[0];
-  return current?.destinationUrl ?? null;
+  return current ? { qr, destination: current } : null;
+}
+
+export async function resolveDestination(store: QrStore, slugInput: string, now = new Date()): Promise<string | null> {
+  return (await resolveQrTarget(store, slugInput, now))?.destination.destinationUrl ?? null;
 }
