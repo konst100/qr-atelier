@@ -69,6 +69,16 @@ export class SqlAccountStore implements AccountStore {
     return rows[0] ? accountFromRow(rows[0]) : null;
   }
 
+  async findById(id: string): Promise<AccountRecord | null> {
+    const rows = await this.client.query(
+      `SELECT id, email, display_name, password_algorithm, password_iterations,
+       password_salt, password_hash, email_verified_at, created_at, updated_at
+       FROM users WHERE id = ? LIMIT 1`,
+      [id],
+    );
+    return rows[0] ? accountFromRow(rows[0]) : null;
+  }
+
   async create(account: AccountRecord): Promise<void> {
     await this.client.query(
       `INSERT INTO users

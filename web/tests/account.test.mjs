@@ -112,6 +112,35 @@ test('auth API rejects malformed input, duplicate registration and wrong credent
   assert.equal(wrong.status, 401);
 });
 
+test('auth API clears sessions and exposes only the public current account', async () => {
+  const accounts = new Map();
+  const sessions = new Map();
+  const store = {
+    findByEmail: async (email) => accounts.get(email) ?? null,
+    findById: async (id) => [...accounts.values()].find((account) => account.id === id) ?? null,
+    create: async (account) => { accounts.set(account.email, account); },
+  };
+  const deps = {
+    accounts,
+    sessions: {
+      save: async (session) => { sessions.set(session.tokenHash, session); },
+      find: async (hash) => sessions.get(hash) ?? null,
+    },
+    now: () => new Date('2026-09-15T10:00:00.000Z'),
+  };
+  deps.accounts = store;
+  const registered = await handleAuthRequest(new Request('https://app.test/api/auth/register', {
+    method: 'POST', body: JSON.stringify({ email: 'me@example.com', password: 'correct horse battery staple', displayName: 'Me' }),
+  }), deps);
+  const cookie = registered.headers.get('Set-Cookie').split(';')[0];
+  const me = await handleAuthRequest(new Request('https://app.test/api/auth/me', { headers: { Cookie: cookie } }), deps);
+  assert.equal(me.status, 200);
+  assert.deepEqual(await me.json().then((body) => body.account.displayName), 'Me');
+  const logout = await handleAuthRequest(new Request('https://app.test/api/auth/logout', { method: 'POST', headers: { Cookie: cookie } }), deps);
+  assert.equal(logout.status, 204);
+  assert.match(logout.headers.get('Set-Cookie'), /Max-Age=0/);
+});
+
 test('QR API authenticates by hashed session and scopes records to the user workspace', async () => {
   const accounts = new Map();
   const sessions = new Map();

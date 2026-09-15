@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { QrFields } from '@/components/qr-fields';
 import { QrPreview } from '@/components/qr-preview';
 import { QrLibrary } from '@/components/qr-library';
+import { AccountPanel } from '@/components/account-panel';
 import { buildPayload, initialDraft, type QrDraft } from '@/lib/qr';
 import { LIBRARY_KEY, LANGUAGE_KEY, parseLibrary, savedDraft, type SavedQr } from '@/lib/storage';
 import { languageOptions, translations, type Language } from '@/lib/translations';
@@ -75,6 +76,7 @@ export function QrWorkspace() {
         <button className={view === 'library' ? 'active' : ''} onClick={() => setView('library')}><LibraryBig size={16}/>{t.library}{records.length > 0 && <span>{records.length}</span>}</button>
       </nav>
       <span className="header-description">{t.workspace}</span>
+      <AccountPanel language={language} />
       <label className="language-picker" aria-label={t.language}><Globe2 size={16} /><select value={language} onChange={(event) => changeLanguage(event.target.value as Language)}>{languageOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label>
     </header>
     <main className="main-content">

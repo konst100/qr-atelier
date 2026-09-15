@@ -6,7 +6,7 @@ export const languageOptions: Array<{ code: Language; label: string }> = [
 ];
 const baseTranslations = {
   ru: {
-    workspace: 'Рабочее пространство', create: 'Создать QR-код', library: 'Мои QR-коды',
+    workspace: 'Рабочее пространство', create: 'Создать QR-код', library: 'Мои QR-коды', account: 'Аккаунт', accountTitle: 'Вход в кабинет', accountReady: 'Вы вошли в кабинет', accountIntro: 'Подключите аккаунт, чтобы хранить QR-коды онлайн и управлять динамическими ссылками.', accountName: 'Ваше имя', accountEmail: 'Электронная почта', accountPassword: 'Пароль', authLogin: 'Войти', authRegister: 'Создать аккаунт', authSignOut: 'Выйти', authSuccess: 'Готово: аккаунт подключён.', authSignedOut: 'Вы вышли из аккаунта.', authUnavailable: 'Сервер кабинета пока не подключён. Локальный редактор продолжает работать.', close: 'Закрыть',
     eyebrow: 'ИДЕЯ. ССЫЛКА. СКАН.', title: 'Маленький код.', titleAccent: 'Большие возможности.',
     subtitle: 'Добавьте содержимое, выберите стиль — ваш QR-код готов.',
     content: 'Содержимое', contentHint: 'Что откроется после сканирования?', design: 'Оформление',
@@ -34,13 +34,13 @@ const baseTranslations = {
     cancel: 'Отмена', removed: 'QR-код удалён', newCode: 'Новый код', language: 'Язык интерфейса',
     localBadge: 'На этом устройстве', fileHint: 'PNG — для экрана · SVG — для печати',
     logo: 'Логотип в центре', logoHint: 'PNG, JPG, WEBP или SVG до 200 КБ', logoReady: 'Логотип добавлен', logoRemove: 'Убрать', logoError: 'Выберите изображение до 200 КБ.',
-    urlRequired: 'Введите адрес сайта.', urlInvalid: 'Введите корректную ссылку http:// или https:// без логина и пароля.', slugRequired: 'Введите постоянный адрес.', slugInvalid: 'Используйте латиницу, цифры и дефисы; минимум 6 символов.',
+    urlRequired: 'Введите адрес сайта.', urlInvalid: 'Введите корректную ссылку http:// или https:// без логина и пароля.', slugRequired: 'Введите постоянный адрес.', slugInvalid: 'Используйте латиницу, цифры и дефисы; минимум 6 символов.', passwordInvalid: 'Пароль должен содержать от 12 до 256 символов.', emailTaken: 'Аккаунт с такой почтой уже существует.', invalidCredentials: 'Проверьте электронную почту и пароль.',
     textRequired: 'Добавьте текст для QR-кода.', ssidRequired: 'Введите название сети.', passwordRequired: 'Введите пароль сети.',
     contactRequired: 'Укажите имя или фамилию.', emailInvalid: 'Проверьте адрес электронной почты.',
     tooLong: 'Слишком много данных. Сократите содержимое до 900 байт.', colorInvalid: 'Этот цвет слишком светлый. Выберите более тёмный для надёжного сканирования.',
   },
   de: {
-    workspace: 'Arbeitsbereich', create: 'QR-Code erstellen', library: 'Meine QR-Codes',
+    workspace: 'Arbeitsbereich', create: 'QR-Code erstellen', library: 'Meine QR-Codes', account: 'Konto', accountTitle: 'Im Konto anmelden', accountReady: 'Sie sind angemeldet', accountIntro: 'Verbinden Sie Ihr Konto, um QR-Codes online zu speichern und dynamische Links zu verwalten.', accountName: 'Ihr Name', accountEmail: 'E-Mail-Adresse', accountPassword: 'Passwort', authLogin: 'Anmelden', authRegister: 'Konto erstellen', authSignOut: 'Abmelden', authSuccess: 'Konto verbunden.', authSignedOut: 'Sie wurden abgemeldet.', authUnavailable: 'Der Konto-Server ist noch nicht verbunden. Der lokale Editor funktioniert weiter.', close: 'Schließen',
     eyebrow: 'IDEE. LINK. SCAN.', title: 'Kleiner Code.', titleAccent: 'Große Möglichkeiten.',
     subtitle: 'Inhalt hinzufügen, Stil auswählen — fertig ist Ihr QR-Code.',
     content: 'Inhalt', contentHint: 'Was soll nach dem Scannen erscheinen?', design: 'Gestaltung',
@@ -68,7 +68,7 @@ const baseTranslations = {
     cancel: 'Abbrechen', removed: 'QR-Code gelöscht', newCode: 'Neuer Code', language: 'Sprache',
     localBadge: 'Auf diesem Gerät', fileHint: 'PNG — für Bildschirme · SVG — für den Druck',
     logo: 'Logo in der Mitte', logoHint: 'PNG, JPG, WEBP oder SVG bis 200 KB', logoReady: 'Logo hinzugefügt', logoRemove: 'Entfernen', logoError: 'Wählen Sie ein Bild bis 200 KB.',
-    urlRequired: 'Geben Sie eine Website-Adresse ein.', urlInvalid: 'Geben Sie einen gültigen http:// oder https:// Link ohne Benutzername und Passwort ein.', slugRequired: 'Geben Sie einen festen Pfad ein.', slugInvalid: 'Verwenden Sie Buchstaben, Zahlen und Bindestriche; mindestens 6 Zeichen.',
+    urlRequired: 'Geben Sie eine Website-Adresse ein.', urlInvalid: 'Geben Sie einen gültigen http:// oder https:// Link ohne Benutzername und Passwort ein.', slugRequired: 'Geben Sie einen festen Pfad ein.', slugInvalid: 'Verwenden Sie Buchstaben, Zahlen und Bindestriche; mindestens 6 Zeichen.', passwordInvalid: 'Das Passwort muss 12 bis 256 Zeichen enthalten.', emailTaken: 'Ein Konto mit dieser E-Mail-Adresse existiert bereits.', invalidCredentials: 'Prüfen Sie E-Mail-Adresse und Passwort.',
     textRequired: 'Fügen Sie einen Text hinzu.', ssidRequired: 'Geben Sie den Netzwerknamen ein.', passwordRequired: 'Geben Sie das Netzwerkpasswort ein.',
     contactRequired: 'Geben Sie einen Vor- oder Nachnamen ein.', emailInvalid: 'Prüfen Sie die E-Mail-Adresse.',
     tooLong: 'Zu viele Daten. Kürzen Sie den Inhalt auf maximal 900 Bytes.', colorInvalid: 'Diese Farbe ist zu hell. Wählen Sie eine dunklere Farbe für zuverlässiges Scannen.',

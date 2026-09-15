@@ -22,6 +22,7 @@ export type PublicAccount = Pick<AccountRecord, 'id' | 'email' | 'displayName' |
 export type AccountStore = {
   findByEmail(email: string): Promise<AccountRecord | null>;
   create(account: AccountRecord): Promise<void>;
+  findById?(id: string): Promise<AccountRecord | null>;
 };
 
 export type AccountError = 'emailInvalid' | 'passwordInvalid' | 'emailTaken' | 'invalidCredentials';

@@ -1,5 +1,6 @@
 import {
   createSession,
+  hashSessionToken,
   type SessionData,
   type RegistrationInput,
 } from '../lib/account.ts';
@@ -7,11 +8,13 @@ import {
   AccountServiceError,
   authenticateAccount,
   registerAccount,
+  type PublicAccount,
   type AccountStore,
 } from './account-service.ts';
 
 export type SessionStore = {
   save(session: SessionData): Promise<void>;
+  find?(tokenHash: string): Promise<SessionData | null>;
 };
 
 export type AuthApiDependencies = {
@@ -51,8 +54,33 @@ function cookie(token: string): string {
   return `qr_session=${encodeURIComponent(token)}; Max-Age=${sessionLifetimeSeconds}; Path=/; HttpOnly; Secure; SameSite=Lax`;
 }
 
+function clearedCookie(): string {
+  return 'qr_session=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax';
+}
+
+async function sessionUser(request: Request, dependencies: AuthApiDependencies): Promise<PublicAccount | null> {
+  const raw = request.headers.get('Cookie')?.split(';').map((item) => item.trim()).find((item) => item.startsWith('qr_session='));
+  if (!raw || !dependencies.accounts.findById) return null;
+  let token: string;
+  try { token = decodeURIComponent(raw.slice('qr_session='.length)); } catch { return null; }
+  const session = await dependencies.sessions.find?.(await hashSessionToken(token));
+  if (!session || Date.parse(session.expiresAt) <= (dependencies.now?.() ?? new Date()).getTime()) return null;
+  const account = await dependencies.accounts.findById(session.userId);
+  if (!account) return null;
+  const { password: _password, ...safe } = account;
+  return safe;
+}
+
 export async function handleAuthRequest(request: Request, dependencies: AuthApiDependencies): Promise<Response> {
   const url = new URL(request.url);
+  if (url.pathname === '/api/auth/logout') {
+    if (request.method !== 'POST') return json({ error: 'methodNotAllowed' }, 405, { Allow: 'POST' });
+    return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store', 'Set-Cookie': clearedCookie() } });
+  }
+  if (url.pathname === '/api/auth/me') {
+    if (request.method !== 'GET') return json({ error: 'methodNotAllowed' }, 405, { Allow: 'GET' });
+    return json({ account: await sessionUser(request, dependencies) }, 200);
+  }
   if (url.pathname !== '/api/auth/register' && url.pathname !== '/api/auth/login') {
     return json({ error: 'notFound' }, 404);
   }
