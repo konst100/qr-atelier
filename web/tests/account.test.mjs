@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createSession, hashPassword, normalizeEmail, validateRegistration, verifyPassword } from '../lib/account.ts';
+import { readFile } from 'node:fs/promises';
+
+test('registration normalizes email and validates a strong password', () => {
+  assert.deepEqual(validateRegistration({ email: '  USER@Example.COM ', password: 'correct horse battery staple' }), {
+    data: { email: 'user@example.com', displayName: '' },
+  });
+  assert.equal(validateRegistration({ email: 'not-an-email', password: 'correct horse battery staple' }).error, 'emailInvalid');
+  assert.equal(validateRegistration({ email: 'user@example.com', password: 'too-short' }).error, 'passwordInvalid');
+  assert.equal(normalizeEmail(' A@B.Example '), 'a@b.example');
+});
+
+test('password digest is salted and verifies without storing the password', async () => {
+  const password = 'correct horse battery staple';
+  const digest = await hashPassword(password);
+  assert.equal(digest.algorithm, 'PBKDF2-SHA-256');
+  assert.notEqual(digest.hash, password);
+  assert.notEqual(digest.salt, password);
+  assert.equal(await verifyPassword(password, digest), true);
+  assert.equal(await verifyPassword('wrong password', digest), false);
+  const second = await hashPassword(password);
+  assert.notEqual(second.salt, digest.salt);
+  assert.notEqual(second.hash, digest.hash);
+});
+
+test('session exposes a raw token once and stores only its hash', async () => {
+  const session = await createSession('user_12345', 60_000);
+  assert.match(session.token, /^[A-Za-z0-9_-]{40,}$/);
+  assert.notEqual(session.token, session.data.tokenHash);
+  assert.equal(session.data.userId, 'user_12345');
+  assert.ok(Date.parse(session.data.expiresAt) > Date.now());
+  await assert.rejects(() => createSession('bad'), /Invalid user id/);
+});
+
+test('schema contains ownership and dynamic redirect tables without plaintext password', async () => {
+  const schema = await readFile(new URL('../server/schema.sql', import.meta.url), 'utf8');
+  for (const name of ['users', 'workspaces', 'memberships', 'sessions', 'qr_codes', 'qr_destinations', 'scan_daily']) {
+    assert.match(schema, new RegExp(`CREATE TABLE ${name}`));
+  }
+  assert.match(schema, /password_hash TEXT NOT NULL/);
+  assert.doesNotMatch(schema, /password TEXT NOT NULL/);
+  assert.match(schema, /workspace_id TEXT NOT NULL REFERENCES workspaces/);
+  assert.match(schema, /slug TEXT NOT NULL UNIQUE/);
+});
