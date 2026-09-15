@@ -108,16 +108,18 @@ export async function handleQrRequest(request: Request, dependencies: QrApiDepen
 
   if (request.method === 'GET') {
     const records = await dependencies.qrs.listQrInWorkspace(workspace.id);
-    return json({ workspace, qrCodes: records.map(responseRecord) }, 200);
+    return json({ workspace, qrCodes: records.filter((record) => record.status !== 'archived').map(responseRecord) }, 200);
   }
   if (request.method !== 'POST') return json({ error: 'methodNotAllowed' }, 405, { Allow: 'GET, POST' });
   const input = await body(request);
-  if (!input || typeof input.slug !== 'string' || typeof input.kind !== 'string' || typeof input.name !== 'string' || typeof input.destinationUrl !== 'string') {
+  if (!input || typeof input.slug !== 'string' || typeof input.kind !== 'string' || typeof input.name !== 'string') {
     return json({ error: 'invalidRequest' }, 400);
   }
   try {
-    // Validate before the first INSERT so malformed input cannot leave an orphan QR row.
-    validateDestination(input.destinationUrl);
+    // URL records need a destination; text/contact records keep their payload in designJson.
+    const destinationUrl = input.destinationUrl === undefined ? null : typeof input.destinationUrl === 'string' ? input.destinationUrl : null;
+    if (input.kind === 'url' && destinationUrl === null) return json({ error: 'invalidRequest' }, 400);
+    if (destinationUrl !== null) validateDestination(destinationUrl);
     const qr = await createQr(dependencies.qrs, {
       workspaceId: workspace.id,
       id: typeof input.id === 'string' ? input.id : undefined,
@@ -126,10 +128,9 @@ export async function handleQrRequest(request: Request, dependencies: QrApiDepen
       name: input.name,
       designJson: typeof input.designJson === 'string' ? input.designJson : undefined,
     }, now);
-    await addDestination(dependencies.qrs, workspace.id, {
-      qrCodeId: qr.id,
-      destinationUrl: input.destinationUrl,
-    }, now);
+    if (destinationUrl !== null) {
+      await addDestination(dependencies.qrs, workspace.id, { qrCodeId: qr.id, destinationUrl }, now);
+    }
     return json({ qrCode: responseRecord(qr) }, 201);
   } catch (error) {
     const code = error && typeof error === 'object' && 'code' in error ? error.code : null;

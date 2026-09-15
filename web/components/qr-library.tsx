@@ -7,8 +7,8 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription } from '@/components/u
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { translations, type Language } from '@/lib/translations';
 import type { SavedQr } from '@/lib/storage';
-type Props = { records: SavedQr[]; language: Language; onNew: () => void; onEdit: (record: SavedQr) => void; onDelete: (id: string) => void };
-export function QrLibrary({ records, language, onNew, onEdit, onDelete }: Props) {
+type Props = { records: SavedQr[]; language: Language; onNew: () => void; onEdit: (record: SavedQr) => void; onDelete: (id: string) => void; remote?: boolean };
+export function QrLibrary({ records, language, onNew, onEdit, onDelete, remote = false }: Props) {
   const [search, setSearch] = useState('');
   const [deleting, setDeleting] = useState<SavedQr | null>(null);
   const t = translations[language];
@@ -19,7 +19,7 @@ export function QrLibrary({ records, language, onNew, onEdit, onDelete }: Props)
       const Icon = record.draft.kind === 'url' ? Link2 : record.draft.kind === 'text' ? AlignLeft : ContactRound;
       return <article className="record" key={record.id}><div className="record-icon" style={{color: record.draft.color}}><Icon size={23}/></div><div className="record-info"><h3>{record.draft.name}</h3><p>{t[record.draft.kind]}<span>·</span>{new Intl.DateTimeFormat(language === 'ru' ? 'ru-RU' : 'de-DE', {dateStyle: 'medium'}).format(new Date(record.updatedAt))}</p></div><div className="record-actions"><Button variant="outline" onClick={() => onEdit(record)} aria-label={`${t.edit}: ${record.draft.name}`}><Pencil size={16}/><span>{t.edit}</span></Button><Button variant="ghost" onClick={() => setDeleting(record)} aria-label={`${t.remove}: ${record.draft.name}`}><Trash2 size={17}/></Button></div></article>;
     })}</div>}
-    <div className="library-footnote"><strong>{t.local}</strong><p>{t.localHint}</p></div>
+    <div className="library-footnote"><strong>{remote ? t.online : t.local}</strong><p>{remote ? t.onlineHint : t.localHint}</p></div>
     <AlertDialog open={!!deleting} onOpenChange={(open) => { if (!open) setDeleting(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{t.deleteTitle}</AlertDialogTitle><AlertDialogDescription>{t.deleteText}</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>{t.cancel}</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => { if (deleting) onDelete(deleting.id); setDeleting(null); }}>{t.remove}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </section>;
 }

@@ -5,9 +5,9 @@ import { LogIn, LogOut, UserRound, X } from 'lucide-react';
 import { ApiError, currentAccount, loginAccount, logoutAccount, registerAccount, type ApiAccount } from '@/lib/api-client';
 import { translations, type Language } from '@/lib/translations';
 
-type Props = { language: Language };
+type Props = { language: Language; onAccountChange?: (account: ApiAccount | null) => void };
 
-export function AccountPanel({ language }: Props) {
+export function AccountPanel({ language, onAccountChange }: Props) {
   const t = translations[language];
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -20,8 +20,8 @@ export function AccountPanel({ language }: Props) {
 
   useEffect(() => {
     if (!open || account) return;
-    currentAccount().then((result) => setAccount(result.account)).catch(() => { /* demo assets may have no API adapter */ });
-  }, [open, account]);
+    currentAccount().then((result) => { setAccount(result.account); onAccountChange?.(result.account); }).catch(() => { /* demo assets may have no API adapter */ });
+  }, [open, account, onAccountChange]);
 
   function errorMessage(error: unknown): string {
     if (!(error instanceof ApiError)) return t.authUnavailable;
@@ -41,7 +41,7 @@ export function AccountPanel({ language }: Props) {
       const result = mode === 'login'
         ? await loginAccount({ email, password })
         : await registerAccount({ email, password, displayName });
-      setAccount(result.account); setPassword(''); setMessage(t.authSuccess);
+      setAccount(result.account); onAccountChange?.(result.account); setPassword(''); setMessage(t.authSuccess);
     } catch (error) { setMessage(errorMessage(error)); }
     finally { setBusy(false); }
   }
@@ -49,7 +49,7 @@ export function AccountPanel({ language }: Props) {
   async function signOut() {
     setBusy(true);
     try { await logoutAccount(); } catch { /* clearing the local view is still safe */ }
-    setAccount(null); setBusy(false); setMessage(t.authSignedOut);
+    setAccount(null); onAccountChange?.(null); setBusy(false); setMessage(t.authSignedOut);
   }
 
   return <>

@@ -40,7 +40,7 @@ test('session exposes a raw token once and stores only its hash', async () => {
 test('schema contains ownership and dynamic redirect tables without plaintext password', async () => {
   const schema = await readFile(new URL('../server/schema.sql', import.meta.url), 'utf8');
   for (const name of ['users', 'workspaces', 'memberships', 'sessions', 'qr_codes', 'qr_destinations', 'scan_daily']) {
-    assert.match(schema, new RegExp(`CREATE TABLE ${name}`));
+    assert.match(schema, new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? ${name}`));
   }
   assert.match(schema, /password_hash TEXT NOT NULL/);
   assert.doesNotMatch(schema, /password TEXT NOT NULL/);
@@ -162,6 +162,7 @@ test('QR API authenticates by hashed session and scopes records to the user work
   };
   const qrStore = {
     createQr: async (record) => { qrs.set(record.id, record); },
+    updateQr: async (record) => { qrs.set(record.id, record); },
     getQrInWorkspace: async (workspace, id) => qrs.get(id)?.workspaceId === workspace ? qrs.get(id) : null,
     getQrBySlug: async (slug) => [...qrs.values()].find((qr) => qr.slug === slug) ?? null,
     listQrInWorkspace: async (workspace) => [...qrs.values()].filter((qr) => qr.workspaceId === workspace),
@@ -192,4 +193,16 @@ test('QR API authenticates by hashed session and scopes records to the user work
   assert.equal((await handleQrRequest(new Request('https://app.test/api/qr'), deps)).status, 401);
   assert.equal((await handleQrRequest(new Request('https://app.test/api/qr', { method: 'DELETE', headers: { Cookie: cookie } }), deps)).status, 405);
   assert.equal((await handleQrRequest(new Request('https://app.test/api/qr', { method: 'POST', headers: { Cookie: cookie }, body: JSON.stringify({ slug: 'bad', kind: 'url', name: 'Bad', destinationUrl: 'javascript:alert(1)' }) }), deps)).status, 400);
+  const textResponse = await handleQrRequest(new Request('https://app.test/api/qr', {
+    method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug: 'text-qr-2026', kind: 'text', name: 'Text card', designJson: '{"text":"hello"}' }),
+  }), deps);
+  assert.equal(textResponse.status, 201);
+  const listedText = await handleQrRequest(new Request('https://app.test/api/qr', { headers: { Cookie: cookie } }), deps);
+  const payload = await listedText.json();
+  assert.equal(payload.qrCodes.some((qr) => qr.slug === 'text-qr-2026' && qr.kind === 'text'), true);
+  const archived = await handleQrRequest(new Request('https://app.test/api/qr/qr_12345', { method: 'DELETE', headers: { Cookie: cookie } }), deps);
+  assert.equal(archived.status, 204);
+  const afterArchive = await handleQrRequest(new Request('https://app.test/api/qr', { headers: { Cookie: cookie } }), deps);
+  assert.equal((await afterArchive.json()).qrCodes.some((qr) => qr.id === 'qr_12345'), false);
 });

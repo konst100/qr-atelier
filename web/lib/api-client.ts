@@ -68,7 +68,7 @@ export function listRemoteQrCodes() {
   return request<{ workspace: { id: string; name: string }; qrCodes: ApiQrCode[] }>('/api/qr');
 }
 
-export function createRemoteQrCode(input: { slug: string; kind: string; name: string; destinationUrl: string; designJson?: string }) {
+export function createRemoteQrCode(input: { slug: string; kind: string; name: string; destinationUrl?: string; designJson?: string }) {
   return request<{ qrCode: ApiQrCode }>('/api/qr', { method: 'POST', body: JSON.stringify(input) });
 }
 

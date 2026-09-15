@@ -177,7 +177,7 @@ export class SqlQrStore implements QrStore {
 
   async listQrInWorkspace(workspaceId: string): Promise<QrRecord[]> {
     const rows = await this.client.query(
-      `SELECT ${qrColumns} FROM qr_codes WHERE workspace_id = ? ORDER BY updated_at DESC`,
+      `SELECT ${qrColumns} FROM qr_codes WHERE workspace_id = ? AND status <> 'archived' ORDER BY updated_at DESC`,
       [workspaceId],
     );
     return rows.map(qrFromRow);

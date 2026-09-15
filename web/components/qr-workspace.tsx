@@ -7,11 +7,13 @@ import { QrFields } from '@/components/qr-fields';
 import { QrPreview } from '@/components/qr-preview';
 import { QrLibrary } from '@/components/qr-library';
 import { AccountPanel } from '@/components/account-panel';
+import { archiveRemoteQrCode, createRemoteQrCode, listRemoteQrCodes, updateRemoteQrCode, type ApiAccount } from '@/lib/api-client';
 import { buildPayload, initialDraft, type QrDraft } from '@/lib/qr';
 import { LIBRARY_KEY, LANGUAGE_KEY, parseLibrary, savedDraft, type SavedQr } from '@/lib/storage';
 import { languageOptions, translations, type Language } from '@/lib/translations';
 
 const colors = ['#172554', '#111827', '#1d4ed8', '#6d28d9', '#047857', '#9f1239'];
+const remoteSlugPattern = /^[a-z0-9](?:[a-z0-9-]{4,62}[a-z0-9])?$/;
 type View = 'create' | 'library';
 
 export function QrWorkspace() {
@@ -22,6 +24,8 @@ export function QrWorkspace() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [loaded, setLoaded] = useState(false);
+  const [account, setAccount] = useState<ApiAccount | null>(null);
+  const [remoteIds, setRemoteIds] = useState<Set<string>>(new Set());
   const t = translations[language];
   const result = buildPayload(draft);
 
@@ -53,20 +57,55 @@ export function QrWorkspace() {
     try { window.localStorage.setItem(LIBRARY_KEY, JSON.stringify(next)); }
     catch { setMessage(t.storageError); }
   }
+  function remoteDraft(record: { id: string; updatedAt: string; designJson: string }): SavedQr | null {
+    try {
+      const value: unknown = JSON.parse(record.designJson);
+      if (!value || typeof value !== 'object') return null;
+      return { id: record.id, updatedAt: record.updatedAt, draft: savedDraft(value as QrDraft) };
+    } catch { return null; }
+  }
+  async function loadRemoteLibrary(targetAccount: ApiAccount | null = account) {
+    if (!targetAccount) return;
+    try {
+      const response = await listRemoteQrCodes();
+      const mapped = response.qrCodes.map(remoteDraft).filter((item): item is SavedQr => !!item);
+      setRecords(mapped);
+      setRemoteIds(new Set(response.qrCodes.map((item) => item.id)));
+    } catch { setMessage(t.authUnavailable); }
+  }
   function resetDraft() { setDraft({ ...initialDraft }); setEditingId(null); setView('create'); }
-  function save() {
+  async function save() {
     if (draft.kind === 'wifi') { setMessage(t.wifiNotSaved); return; }
     if (!draft.name.trim()) { setMessage(t.nameRequired); return; }
     if (result.error) { setMessage(t[result.error]); return; }
     try {
-      const record: SavedQr = { id: editingId || crypto.randomUUID(), updatedAt: new Date().toISOString(), draft: savedDraft(draft) };
+      const cleanDraft = savedDraft(draft);
+      if (account) {
+        const id = editingId && remoteIds.has(editingId) ? editingId : null;
+        const slug = remoteSlugPattern.test(cleanDraft.slug) ? cleanDraft.slug : `qr-${crypto.randomUUID().slice(0, 8)}`;
+        const remoteValue = { ...cleanDraft, slug };
+        let remoteId = id;
+        if (id) await updateRemoteQrCode(id, { name: remoteValue.name, status: 'active', ...(draft.kind === 'url' ? { destinationUrl: remoteValue.url } : {}), designJson: JSON.stringify(remoteValue) });
+        else remoteId = (await createRemoteQrCode({ slug, kind: remoteValue.kind, name: remoteValue.name, ...(draft.kind === 'url' ? { destinationUrl: remoteValue.url } : {}), designJson: JSON.stringify(remoteValue) })).qrCode.id;
+        await loadRemoteLibrary();
+        setMessage(id ? t.updated : t.saved);
+        setEditingId(remoteId);
+        return;
+      }
+      const record: SavedQr = { id: editingId || crypto.randomUUID(), updatedAt: new Date().toISOString(), draft: cleanDraft };
       persist(editingId ? records.map((item) => item.id === editingId ? record : item) : [record, ...records]);
       setMessage(editingId ? t.updated : t.saved);
       setEditingId(record.id);
-    } catch { setMessage(t.storageError); }
+    } catch { setMessage(account ? t.authUnavailable : t.storageError); }
   }
   function edit(record: SavedQr) { setDraft({ ...record.draft }); setEditingId(record.id); setView('create'); }
-  function remove(id: string) { persist(records.filter((record) => record.id !== id)); setMessage(t.removed); if (editingId === id) resetDraft(); }
+  async function remove(id: string) {
+    if (account && remoteIds.has(id)) {
+      try { await archiveRemoteQrCode(id); await loadRemoteLibrary(); setMessage(t.removed); }
+      catch { setMessage(t.authUnavailable); }
+    } else { persist(records.filter((record) => record.id !== id)); setMessage(t.removed); }
+    if (editingId === id) resetDraft();
+  }
 
   return <div className="site-shell">
     <header className="site-header">
@@ -76,11 +115,11 @@ export function QrWorkspace() {
         <button className={view === 'library' ? 'active' : ''} onClick={() => setView('library')}><LibraryBig size={16}/>{t.library}{records.length > 0 && <span>{records.length}</span>}</button>
       </nav>
       <span className="header-description">{t.workspace}</span>
-      <AccountPanel language={language} />
+      <AccountPanel language={language} onAccountChange={(next) => { setAccount(next); if (next) void loadRemoteLibrary(next); else { setRemoteIds(new Set()); try { setRecords(parseLibrary(window.localStorage.getItem(LIBRARY_KEY))); } catch { /* keep current records */ } } }} />
       <label className="language-picker" aria-label={t.language}><Globe2 size={16} /><select value={language} onChange={(event) => changeLanguage(event.target.value as Language)}>{languageOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label>
     </header>
     <main className="main-content">
-      {view === 'library' ? <section className="library-view"><div className="library-heading"><div><p className="eyebrow"><span />QR ATELIER / LIBRARY</p><h1>{t.libraryTitle}</h1><p className="page-subtitle">{t.librarySubtitle}</p></div><Button variant="outline" onClick={resetDraft}><Sparkles size={17}/>{t.newCode}</Button></div><QrLibrary records={records} language={language} onNew={resetDraft} onEdit={edit} onDelete={remove}/></section> : <>
+      {view === 'library' ? <section className="library-view"><div className="library-heading"><div><p className="eyebrow"><span />QR ATELIER / LIBRARY</p><h1>{t.libraryTitle}</h1><p className="page-subtitle">{t.librarySubtitle}</p></div><Button variant="outline" onClick={resetDraft}><Sparkles size={17}/>{t.newCode}</Button></div><QrLibrary records={records} language={language} remote={!!account} onNew={resetDraft} onEdit={edit} onDelete={remove}/></section> : <>
         <section className="page-heading"><div><p className="eyebrow"><span />{t.eyebrow}</p><h1>{t.title}<br /><span>{t.titleAccent}</span></h1><p className="page-subtitle">{t.subtitle}</p></div><div className="heading-badge"><ArrowUpRight size={26} strokeWidth={1.4} /><span>QR / 01</span></div></section>
         <div className="workbench"><div className="editor-panel">
           <section className="editor-section"><div className="section-title"><span className="step-number">01</span><div><h2>{t.content}</h2><p>{t.contentHint}</p></div><Sparkles size={20} /></div><QrFields draft={draft} language={language} update={update}/></section>
