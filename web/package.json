@@ -9,6 +9,7 @@
     "dev": "vinext dev",
     "build": "vinext build",
     "start": "vinext start",
+    "server:local": "node --experimental-strip-types server/local-server.ts",
     "preview:demo": "wrangler dev --config wrangler.demo.jsonc",
     "deploy:demo": "wrangler deploy --config wrangler.demo.jsonc",
     "lint": "oxlint",

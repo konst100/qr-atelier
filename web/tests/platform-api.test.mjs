@@ -60,6 +60,7 @@ test('app router dispatches auth, QR cabinet, and redirect paths', async () => {
   };
   assert.equal((await handleAppRequest(new Request('https://app.test/api/auth/login', { method: 'GET' }), deps)).status, 405);
   assert.equal((await handleAppRequest(new Request('https://app.test/api/qr'), deps)).status, 401);
+  assert.equal((await handleAppRequest(new Request('https://app.test/api/qr/qr_1'), deps)).status, 401);
   assert.equal((await handleAppRequest(new Request('https://app.test/r/missing-1'), deps)).status, 404);
   assert.equal((await handleAppRequest(new Request('https://app.test/unknown'), deps)).status, 404);
 });

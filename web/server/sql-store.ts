@@ -89,6 +89,15 @@ export class SqlAccountStore implements AccountStore {
         account.password.iterations, account.password.salt, account.password.hash,
         account.emailVerifiedAt, account.createdAt, account.updatedAt],
     );
+    const workspaceId = `workspace_${account.id}`;
+    await this.client.query(
+      `INSERT INTO workspaces (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+      [workspaceId, account.displayName ? `${account.displayName} workspace` : 'QR Atelier workspace', account.createdAt, account.updatedAt],
+    );
+    await this.client.query(
+      `INSERT INTO memberships (workspace_id, user_id, role, created_at) VALUES (?, ?, 'owner', ?)`,
+      [workspaceId, account.id, account.createdAt],
+    );
   }
 }
 
