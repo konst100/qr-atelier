@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/postcss';
 import vinext from 'vinext';
 import { defineConfig } from 'vite';
 import hostingConfig from './.openai/hosting.json';
+import nextConfig from './next.config';
 
 const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
   '00000000-0000-4000-8000-000000000000';
@@ -42,7 +43,9 @@ export default defineConfig(async () => {
   process.env.MINIFLARE_REGISTRY_PATH ??= '.wrangler/registry';
 
   // Wrangler snapshots its log path while the Cloudflare plugin is imported.
-  const { cloudflare } = await import('@cloudflare/vite-plugin');
+  const cloudflare = nextConfig.output === 'export'
+    ? undefined
+    : (await import('@cloudflare/vite-plugin')).cloudflare;
 
   return {
     css: { postcss: { plugins: [tailwindcss()] } },
@@ -52,10 +55,10 @@ export default defineConfig(async () => {
     plugins: [
       vinext(),
       sites(),
-      cloudflare({
+      ...(cloudflare ? [cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
         config: localBindingConfig,
-      }),
+      })] : []),
     ],
   };
 });

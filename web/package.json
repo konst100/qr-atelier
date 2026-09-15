@@ -8,7 +8,9 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
-    "start": "wrangler dev --config dist/server/wrangler.json",
+    "start": "vinext start",
+    "preview:demo": "wrangler dev --config wrangler.demo.jsonc",
+    "deploy:demo": "wrangler deploy --config wrangler.demo.jsonc",
     "lint": "oxlint",
     "format": "oxfmt",
     "typecheck": "tsc --noEmit",
