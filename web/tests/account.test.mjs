@@ -141,6 +141,15 @@ test('auth API clears sessions and exposes only the public current account', asy
   assert.match(logout.headers.get('Set-Cookie'), /Max-Age=0/);
 });
 
+test('local HTTP sessions omit Secure only for localhost transport', async () => {
+  const deps = { accounts: { findByEmail: async () => null, create: async () => {} }, sessions: { save: async () => {} } };
+  const response = await handleAuthRequest(new Request('http://local.test/api/auth/register', {
+    method: 'POST', body: JSON.stringify({ email: 'local@example.com', password: 'correct horse battery staple' }),
+  }), deps);
+  assert.equal(response.status, 201);
+  assert.doesNotMatch(response.headers.get('Set-Cookie'), /Secure/);
+});
+
 test('QR API authenticates by hashed session and scopes records to the user workspace', async () => {
   const accounts = new Map();
   const sessions = new Map();

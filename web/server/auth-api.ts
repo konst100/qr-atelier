@@ -50,12 +50,12 @@ function registrationInput(body: Record<string, unknown>): RegistrationInput | n
   };
 }
 
-function cookie(token: string): string {
-  return `qr_session=${encodeURIComponent(token)}; Max-Age=${sessionLifetimeSeconds}; Path=/; HttpOnly; Secure; SameSite=Lax`;
+function cookie(token: string, secure: boolean): string {
+  return `qr_session=${encodeURIComponent(token)}; Max-Age=${sessionLifetimeSeconds}; Path=/; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Lax`;
 }
 
-function clearedCookie(): string {
-  return 'qr_session=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax';
+function clearedCookie(secure: boolean): string {
+  return `qr_session=; Max-Age=0; Path=/; HttpOnly;${secure ? ' Secure;' : ''} SameSite=Lax`;
 }
 
 async function sessionUser(request: Request, dependencies: AuthApiDependencies): Promise<PublicAccount | null> {
@@ -73,9 +73,10 @@ async function sessionUser(request: Request, dependencies: AuthApiDependencies):
 
 export async function handleAuthRequest(request: Request, dependencies: AuthApiDependencies): Promise<Response> {
   const url = new URL(request.url);
+  const secureCookie = url.protocol === 'https:';
   if (url.pathname === '/api/auth/logout') {
     if (request.method !== 'POST') return json({ error: 'methodNotAllowed' }, 405, { Allow: 'POST' });
-    return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store', 'Set-Cookie': clearedCookie() } });
+    return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store', 'Set-Cookie': clearedCookie(secureCookie) } });
   }
   if (url.pathname === '/api/auth/me') {
     if (request.method !== 'GET') return json({ error: 'methodNotAllowed' }, 405, { Allow: 'GET' });
@@ -97,7 +98,7 @@ export async function handleAuthRequest(request: Request, dependencies: AuthApiD
       : await authenticateAccount(dependencies.accounts, input.email, input.password);
     const session = await createSession(account.id, sessionLifetimeSeconds * 1000);
     await dependencies.sessions.save(session.data);
-    return json({ account }, url.pathname.endsWith('/register') ? 201 : 200, { 'Set-Cookie': cookie(session.token) });
+    return json({ account }, url.pathname.endsWith('/register') ? 201 : 200, { 'Set-Cookie': cookie(session.token, secureCookie) });
   } catch (error) {
     if (error instanceof AccountServiceError) {
       if (error.code === 'emailTaken') return json({ error: error.code }, 409);
