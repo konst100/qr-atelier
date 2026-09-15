@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, Globe2, LibraryBig, QrCode as ScanQr, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowUpRight, Globe2, LibraryBig, ShieldCheck, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { QrFields } from '@/components/qr-fields';
 import { QrPreview } from '@/components/qr-preview';
@@ -69,7 +69,7 @@ export function QrWorkspace() {
 
   return <div className="site-shell">
     <header className="site-header">
-      <button className="brand" onClick={resetDraft} aria-label="QR Atelier"><span className="brand-icon"><ScanQr size={24} /></span>QR <b>Atelier</b><span className="brand-dot">.</span></button>
+      <button className="brand" onClick={resetDraft} aria-label="QR Atelier"><img className="brand-icon" src="/brand-mark.svg" alt="" width="39" height="39" />QR <b>Atelier</b><span className="brand-dot">.</span></button>
       <nav className="primary-nav" aria-label={t.workspace}>
         <button className={view === 'create' ? 'active' : ''} onClick={resetDraft}><Sparkles size={16}/>{t.create}</button>
         <button className={view === 'library' ? 'active' : ''} onClick={() => setView('library')}><LibraryBig size={16}/>{t.library}{records.length > 0 && <span>{records.length}</span>}</button>
@@ -88,7 +88,7 @@ export function QrWorkspace() {
             <div className="field logo-field"><label htmlFor="qr-logo">{t.logo}</label><div className="logo-picker"><input id="qr-logo" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={(event) => chooseLogo(event.target.files?.[0])} /><span>{draft.logoDataUrl ? t.logoReady : t.logoHint}</span>{draft.logoDataUrl && <Button type="button" variant="ghost" onClick={() => update('logoDataUrl', '')}>{t.logoRemove}</Button>}</div></div>
           </section>
           <section className="save-section"><div className="field"><label htmlFor="qr-name">{t.name}</label><input id="qr-name" className="save-name-input" value={draft.name} onChange={(event) => update('name', event.target.value)} maxLength={80} placeholder={t.namePlaceholder}/></div><Button className="primary-button save-button" onClick={save} disabled={!loaded || draft.kind === 'wifi'}><LibraryBig size={17}/>{editingId ? t.update : t.save}</Button>{draft.kind === 'wifi' && <p className="field-hint save-warning">{t.wifiNotSaved}</p>}</section>
-          <div className="static-notice"><ShieldCheck size={21} /><div><strong>{t.static}</strong><p>{t.staticHint}</p></div></div>
+          <div className="static-notice"><ShieldCheck size={21} /><div><strong>{draft.mode === 'dynamic' ? t.dynamicMode : t.static}</strong><p>{draft.mode === 'dynamic' ? t.dynamicModeHint : t.staticHint}</p></div></div>
         </div><QrPreview payload={result.payload} color={draft.color} shape={draft.shape} logoDataUrl={draft.logoDataUrl} name={draft.name} language={language} validation={result.error ? t[result.error] : undefined} onMessage={setMessage}/></div>
       </>}
       <footer className="workspace-footer"><ShieldCheck size={15}/><span>{t.privacy}</span><span className="footer-brand">QR Atelier</span></footer>

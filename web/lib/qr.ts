@@ -1,14 +1,15 @@
 export type QrKind = 'url' | 'text' | 'wifi' | 'contact';
+export type QrMode = 'static' | 'dynamic';
 export type QrShape = 'square' | 'rounded';
 export type QrDraft = {
-  kind: QrKind; name: string; url: string; text: string;
+  kind: QrKind; mode: QrMode; slug: string; name: string; url: string; text: string;
   ssid: string; password: string; security: 'WPA' | 'nopass';
   firstName: string; lastName: string; phone: string; email: string; organization: string;
   color: string; shape: QrShape; logoDataUrl: string;
 };
-export type QrError = 'urlRequired' | 'urlInvalid' | 'textRequired' | 'ssidRequired' | 'passwordRequired' | 'contactRequired' | 'emailInvalid' | 'tooLong' | 'colorInvalid';
+export type QrError = 'urlRequired' | 'urlInvalid' | 'slugRequired' | 'slugInvalid' | 'textRequired' | 'ssidRequired' | 'passwordRequired' | 'contactRequired' | 'emailInvalid' | 'tooLong' | 'colorInvalid';
 export const initialDraft: QrDraft = {
-  kind: 'url', name: '', url: 'https://example.com', text: '', ssid: '', password: '', security: 'WPA',
+  kind: 'url', mode: 'static', slug: 'my-qr', name: '', url: 'https://example.com', text: '', ssid: '', password: '', security: 'WPA',
   firstName: '', lastName: '', phone: '', email: '', organization: '', color: '#172554', shape: 'square', logoDataUrl: '',
 };
 const escapeWifi = (value: string) => value.replace(/[\\;,:\"]/g, '\\$&');
@@ -31,8 +32,15 @@ export function buildPayload(draft: QrDraft): { payload: string; error?: QrError
       try {
         const url = new URL(draft.url.trim());
         if (!['https:', 'http:'].includes(url.protocol) || !url.hostname || url.username || url.password) return bad('urlInvalid');
-        payload = url.href;
+        payload = draft.mode === 'dynamic'
+          ? `${typeof window === 'undefined' ? 'https://qr-atelier.example' : window.location.origin}/r/${draft.slug.trim().toLowerCase()}`
+          : url.href;
       } catch { return bad('urlInvalid'); }
+      if (draft.mode === 'dynamic') {
+        const slug = draft.slug.trim().toLowerCase();
+        if (!slug) return bad('slugRequired');
+        if (!/^[a-z0-9](?:[a-z0-9-]{4,62}[a-z0-9])?$/.test(slug)) return bad('slugInvalid');
+      }
       break;
     }
     case 'text':

@@ -38,3 +38,9 @@ test('adds a center logo only when a local image is supplied', () => {
   assert.equal(qrOptions('test', '#172554', 'rounded').image, undefined);
   assert.equal(qrOptions('test', '#172554', 'rounded', 1000, logo).imageOptions.imageSize, 0.24);
 });
+test('builds a portable redirect payload for dynamic links', () => {
+  const dynamic = buildPayload({ ...initialDraft, mode: 'dynamic', slug: 'summer-2026', url: 'https://client.example/menu' });
+  assert.equal(dynamic.error, undefined);
+  assert.match(dynamic.payload, /\/r\/summer-2026$/);
+  assert.equal(buildPayload({ ...initialDraft, mode: 'dynamic', slug: 'bad', url: 'https://client.example' }).error, 'slugInvalid');
+});

@@ -7,7 +7,7 @@ export type SavedQr = { id: string; updatedAt: string; draft: QrDraft };
 // are never carried into a saved record.
 export function savedDraft(draft: QrDraft): QrDraft {
   if (draft.kind === 'wifi') throw new Error('Wi-Fi records cannot be saved');
-  const clean = { ...initialDraft, url: '', kind: draft.kind, name: draft.name.trim().slice(0, 80), color: draft.color, shape: draft.shape, logoDataUrl: draft.logoDataUrl || '' };
+  const clean = { ...initialDraft, url: '', kind: draft.kind, mode: draft.mode, slug: draft.slug.trim().toLowerCase(), name: draft.name.trim().slice(0, 80), color: draft.color, shape: draft.shape, logoDataUrl: draft.logoDataUrl || '' };
   if (draft.kind === 'url') clean.url = draft.url;
   if (draft.kind === 'text') clean.text = draft.text;
   if (draft.kind === 'contact') {
