@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createSession, hashPassword, normalizeEmail, validateRegistration, verifyPassword } from '../lib/account.ts';
 import { readFile } from 'node:fs/promises';
+import { AccountServiceError, authenticateAccount, registerAccount } from '../server/account-service.ts';
 
 test('registration normalizes email and validates a strong password', () => {
   assert.deepEqual(validateRegistration({ email: '  USER@Example.COM ', password: 'correct horse battery staple' }), {
@@ -43,4 +44,23 @@ test('schema contains ownership and dynamic redirect tables without plaintext pa
   assert.doesNotMatch(schema, /password TEXT NOT NULL/);
   assert.match(schema, /workspace_id TEXT NOT NULL REFERENCES workspaces/);
   assert.match(schema, /slug TEXT NOT NULL UNIQUE/);
+});
+
+test('account service keeps registration and authentication provider-independent', async () => {
+  const accounts = new Map();
+  const store = {
+    findByEmail: async (email) => accounts.get(email) ?? null,
+    create: async (account) => { accounts.set(account.email, account); },
+  };
+  const account = await registerAccount(store, {
+    email: 'Owner@Example.com', password: 'correct horse battery staple', displayName: ' Owner ',
+  }, { id: 'user_12345', now: new Date('2026-09-15T10:00:00.000Z') });
+  assert.deepEqual(account, {
+    id: 'user_12345', email: 'owner@example.com', displayName: 'Owner', emailVerifiedAt: null,
+    createdAt: '2026-09-15T10:00:00.000Z', updatedAt: '2026-09-15T10:00:00.000Z',
+  });
+  assert.equal(Object.hasOwn(account, 'password'), false);
+  assert.equal((await authenticateAccount(store, 'OWNER@example.com', 'correct horse battery staple')).id, 'user_12345');
+  await assert.rejects(() => authenticateAccount(store, 'owner@example.com', 'wrong'), (error) => error instanceof AccountServiceError && error.code === 'invalidCredentials');
+  await assert.rejects(() => registerAccount(store, { email: 'owner@example.com', password: 'correct horse battery staple' }), (error) => error instanceof AccountServiceError && error.code === 'emailTaken');
 });
