@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { addDestination, createQr, QrServiceError, resolveDestination, validateDestination, validateSlug } from '../server/qr-service.ts';
+import { SqlAccountStore, SqlQrStore } from '../server/sql-store.ts';
+import { hashPassword } from '../lib/account.ts';
 
 function makeStore() {
   const qrs = new Map();
@@ -60,4 +62,36 @@ test('expired or paused QR codes do not redirect', async () => {
   qr.status = 'active';
   qr.expiresAt = '2026-09-15T11:00:00.000Z';
   assert.equal(await resolveDestination(store, qr.slug, now), null);
+});
+
+test('SQL stores keep driver details outside the domain services', async () => {
+  const calls = [];
+  const client = {
+    query: async (sql, params) => {
+      calls.push({ sql, params });
+      if (sql.includes('FROM users')) return [{
+        id: 'user_12345', email: 'owner@example.com', display_name: 'Owner',
+        password_algorithm: 'PBKDF2-SHA-256', password_iterations: 210000,
+        password_salt: 'salt', password_hash: 'hash', email_verified_at: null,
+        created_at: '2026-09-15T10:00:00.000Z', updated_at: '2026-09-15T10:00:00.000Z',
+      }];
+      if (sql.includes('FROM qr_codes')) return [{
+        id: 'qr_12345', workspace_id: 'workspace_a', slug: 'summer-2026', kind: 'url',
+        name: 'Summer', status: 'active', design_json: '{}', folder_id: null,
+        campaign_id: null, expires_at: null, created_at: '2026-09-15T10:00:00.000Z',
+        updated_at: '2026-09-15T10:00:00.000Z',
+      }];
+      if (sql.includes('FROM qr_destinations')) return [];
+      return [];
+    },
+  };
+  const accountStore = new SqlAccountStore(client);
+  const account = await accountStore.findByEmail('owner@example.com');
+  assert.equal(account.password.algorithm, 'PBKDF2-SHA-256');
+  const digest = await hashPassword('correct horse battery staple');
+  await accountStore.create({ ...account, id: 'user_67890', password: digest });
+  const qrStore = new SqlQrStore(client);
+  assert.equal((await qrStore.getQrInWorkspace('workspace_a', 'qr_12345')).slug, 'summer-2026');
+  assert.equal(calls.filter(({ sql }) => sql.includes('FROM')).length, 2);
+  assert.ok(calls.some(({ sql, params }) => sql.includes('INSERT INTO users') && params.includes('user_67890')));
 });

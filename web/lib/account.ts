@@ -78,8 +78,9 @@ export async function verifyPassword(password: string, digest: PasswordDigest): 
   if (digest.algorithm !== 'PBKDF2-SHA-256' || digest.iterations < 100_000) return false;
   const api = cryptoApi();
   const key = await api.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const salt = fromBase64Url(digest.salt);
   const bits = await api.subtle.deriveBits(
-    { name: 'PBKDF2', salt: fromBase64Url(digest.salt), iterations: digest.iterations, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt: salt.buffer as ArrayBuffer, iterations: digest.iterations, hash: 'SHA-256' },
     key,
     256,
   );
