@@ -1,6 +1,7 @@
 import type { AccountStore, AccountRecord } from './account-service.ts';
 import type { PasswordDigest } from '../lib/account.ts';
 import type { QrDestination, QrRecord, QrStore } from './qr-service.ts';
+import type { SessionData } from '../lib/account.ts';
 
 export type SqlValue = string | number | null;
 export type SqlRow = Record<string, unknown>;
@@ -168,5 +169,69 @@ export class SqlQrStore implements QrStore {
       [qrCodeId],
     );
     return rows.map(destinationFromRow);
+  }
+}
+
+/** Stores only the hash of a session token. The raw token never reaches SQL. */
+export class SqlSessionStore {
+  private readonly client: SqlClient;
+  private readonly now: () => Date;
+
+  constructor(client: SqlClient, now: () => Date = () => new Date()) {
+    this.client = client;
+    this.now = now;
+  }
+
+  async save(session: SessionData): Promise<void> {
+    await this.client.query(
+      `INSERT INTO sessions (token_hash, user_id, expires_at, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [session.tokenHash, session.userId, session.expiresAt, this.now().toISOString()],
+    );
+  }
+
+  async find(tokenHash: string): Promise<SessionData | null> {
+    const rows = await this.client.query(
+      `SELECT token_hash, user_id, expires_at
+       FROM sessions WHERE token_hash = ? LIMIT 1`,
+      [tokenHash],
+    );
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      tokenHash: stringValue(row, 'token_hash'),
+      userId: stringValue(row, 'user_id'),
+      expiresAt: stringValue(row, 'expires_at'),
+    };
+  }
+}
+
+export type WorkspaceSummary = { id: string; name: string };
+
+/** Selects the user's owner/admin workspace first, with no provider-specific SQL API. */
+export class SqlWorkspaceAccess {
+  private readonly client: SqlClient;
+
+  constructor(client: SqlClient) {
+    this.client = client;
+  }
+
+  async defaultForUser(userId: string): Promise<WorkspaceSummary | null> {
+    const rows = await this.client.query(
+      `SELECT w.id, w.name
+       FROM memberships m
+       JOIN workspaces w ON w.id = m.workspace_id
+       WHERE m.user_id = ?
+       ORDER BY CASE m.role
+         WHEN 'owner' THEN 0
+         WHEN 'admin' THEN 1
+         WHEN 'editor' THEN 2
+         ELSE 3
+       END, w.created_at ASC
+       LIMIT 1`,
+      [userId],
+    );
+    const row = rows[0];
+    return row ? { id: stringValue(row, 'id'), name: stringValue(row, 'name') } : null;
   }
 }

@@ -1,5 +1,5 @@
 import { hashSessionToken, type SessionData } from '../lib/account.ts';
-import { addDestination, createQr, type QrRecord, type QrStore } from './qr-service.ts';
+import { addDestination, createQr, validateDestination, type QrRecord, type QrStore } from './qr-service.ts';
 
 export type SessionLookup = {
   find(tokenHash: string): Promise<SessionData | null>;
@@ -75,6 +75,8 @@ export async function handleQrRequest(request: Request, dependencies: QrApiDepen
     return json({ error: 'invalidRequest' }, 400);
   }
   try {
+    // Validate before the first INSERT so malformed input cannot leave an orphan QR row.
+    validateDestination(input.destinationUrl);
     const qr = await createQr(dependencies.qrs, {
       workspaceId: workspace.id,
       id: typeof input.id === 'string' ? input.id : undefined,
