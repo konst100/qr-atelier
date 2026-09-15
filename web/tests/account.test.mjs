@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { createSession, hashPassword, normalizeEmail, validateRegistration, verifyPassword } from '../lib/account.ts';
 import { readFile } from 'node:fs/promises';
 import { AccountServiceError, authenticateAccount, registerAccount } from '../server/account-service.ts';
+import { handleAuthRequest } from '../server/auth-api.ts';
 
 test('registration normalizes email and validates a strong password', () => {
   assert.deepEqual(validateRegistration({ email: '  USER@Example.COM ', password: 'correct horse battery staple' }), {
@@ -63,4 +64,49 @@ test('account service keeps registration and authentication provider-independent
   assert.equal((await authenticateAccount(store, 'OWNER@example.com', 'correct horse battery staple')).id, 'user_12345');
   await assert.rejects(() => authenticateAccount(store, 'owner@example.com', 'wrong'), (error) => error instanceof AccountServiceError && error.code === 'invalidCredentials');
   await assert.rejects(() => registerAccount(store, { email: 'owner@example.com', password: 'correct horse battery staple' }), (error) => error instanceof AccountServiceError && error.code === 'emailTaken');
+});
+
+test('auth API returns a secure session cookie and keeps transport separate from storage', async () => {
+  const accounts = new Map();
+  const sessions = [];
+  const dependencies = {
+    accounts: {
+      findByEmail: async (email) => accounts.get(email) ?? null,
+      create: async (account) => { accounts.set(account.email, account); },
+    },
+    sessions: { save: async (session) => { sessions.push(session); } },
+    now: () => new Date('2026-09-15T10:00:00.000Z'),
+  };
+  const register = await handleAuthRequest(new Request('https://app.test/api/auth/register', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'owner@example.com', password: 'correct horse battery staple', displayName: 'Owner' }),
+  }), dependencies);
+  assert.equal(register.status, 201);
+  assert.equal(register.headers.get('Cache-Control'), 'no-store');
+  assert.match(register.headers.get('Set-Cookie'), /HttpOnly/);
+  assert.match(register.headers.get('Set-Cookie'), /Secure/);
+  assert.match(register.headers.get('Set-Cookie'), /SameSite=Lax/);
+  assert.equal(sessions.length, 1);
+  const registerBody = await register.json();
+  assert.equal(registerBody.account.email, 'owner@example.com');
+  assert.equal(Object.hasOwn(registerBody.account, 'password'), false);
+
+  const login = await handleAuthRequest(new Request('https://app.test/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'OWNER@example.com', password: 'correct horse battery staple' }),
+  }), dependencies);
+  assert.equal(login.status, 200);
+  assert.equal(sessions.length, 2);
+});
+
+test('auth API rejects malformed input, duplicate registration and wrong credentials', async () => {
+  const store = { findByEmail: async () => null, create: async () => {} };
+  const deps = { accounts: store, sessions: { save: async () => {} } };
+  assert.equal((await handleAuthRequest(new Request('https://app.test/api/auth/register', { method: 'POST', body: '{' }), deps)).status, 400);
+  assert.equal((await handleAuthRequest(new Request('https://app.test/api/auth/login', { method: 'GET' }), deps)).status, 405);
+  assert.equal((await handleAuthRequest(new Request('https://app.test/other', { method: 'POST' }), deps)).status, 404);
+  const wrong = await handleAuthRequest(new Request('https://app.test/api/auth/login', {
+    method: 'POST', body: JSON.stringify({ email: 'owner@example.com', password: 'wrong password' }),
+  }), deps);
+  assert.equal(wrong.status, 401);
 });
