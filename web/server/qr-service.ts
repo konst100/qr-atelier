@@ -34,7 +34,7 @@ export type QrStore = {
   listDestinations(qrCodeId: string): Promise<QrDestination[]>;
 };
 
-export type QrServiceErrorCode = 'invalidSlug' | 'invalidDestination' | 'qrNotFound' | 'invalidDates';
+export type QrServiceErrorCode = 'invalidSlug' | 'slugTaken' | 'invalidKind' | 'invalidName' | 'invalidDestination' | 'qrNotFound' | 'invalidDates';
 
 export class QrServiceError extends Error {
   readonly code: QrServiceErrorCode;
@@ -46,7 +46,7 @@ export class QrServiceError extends Error {
   }
 }
 
-const slugPattern = /^[a-z0-9](?:[a-z0-9-]{4,62}[a-z0-9])?$/;
+const slugPattern = /^[a-z0-9][a-z0-9-]{4,62}[a-z0-9]$/;
 
 export function validateSlug(value: string): string {
   const slug = value.trim().toLowerCase();
@@ -72,13 +72,17 @@ export async function createQr(
   now = new Date(),
 ): Promise<QrRecord> {
   const slug = validateSlug(input.slug);
+  if (!['url', 'text', 'contact'].includes(input.kind)) throw new QrServiceError('invalidKind');
+  const name = input.name.trim().slice(0, 120);
+  if (!name) throw new QrServiceError('invalidName');
+  if (await store.getQrBySlug(slug)) throw new QrServiceError('slugTaken');
   const createdAt = now.toISOString();
   const record: QrRecord = {
     id: input.id ?? crypto.randomUUID(),
     workspaceId: input.workspaceId,
     slug,
     kind: input.kind,
-    name: input.name.trim().slice(0, 120),
+    name,
     status: 'active',
     designJson: input.designJson ?? '{}',
     folderId: null,
@@ -87,7 +91,13 @@ export async function createQr(
     createdAt,
     updatedAt: createdAt,
   };
-  await store.createQr(record);
+  try {
+    await store.createQr(record);
+  } catch (error) {
+    // The unique constraint remains authoritative if another request won the race.
+    if (await store.getQrBySlug(slug)) throw new QrServiceError('slugTaken');
+    throw error;
+  }
   return record;
 }
 
@@ -116,14 +126,19 @@ export async function addDestination(
 
 export type ResolvedQr = { qr: QrRecord; destination: QrDestination };
 
+/** The cabinet needs the current target even while a QR is paused. */
+export async function currentQrDestination(store: QrStore, qrCodeId: string, now = new Date()): Promise<QrDestination | null> {
+  const destinations = await store.listDestinations(qrCodeId);
+  return destinations
+    .filter((destination) => new Date(destination.startsAt) <= now && (!destination.endsAt || new Date(destination.endsAt) > now))
+    .sort((a, b) => b.startsAt.localeCompare(a.startsAt))[0] ?? null;
+}
+
 export async function resolveQrTarget(store: QrStore, slugInput: string, now = new Date()): Promise<ResolvedQr | null> {
   const slug = validateSlug(slugInput);
   const qr = await store.getQrBySlug(slug);
   if (!qr || qr.status !== 'active' || (qr.expiresAt && new Date(qr.expiresAt) <= now)) return null;
-  const destinations = await store.listDestinations(qr.id);
-  const current = destinations
-    .filter((destination) => new Date(destination.startsAt) <= now && (!destination.endsAt || new Date(destination.endsAt) > now))
-    .sort((a, b) => b.startsAt.localeCompare(a.startsAt))[0];
+  const current = await currentQrDestination(store, qr.id, now);
   return current ? { qr, destination: current } : null;
 }
 

@@ -39,7 +39,7 @@ export function buildPayload(draft: QrDraft): { payload: string; error?: QrError
       if (draft.mode === 'dynamic') {
         const slug = draft.slug.trim().toLowerCase();
         if (!slug) return bad('slugRequired');
-        if (!/^[a-z0-9](?:[a-z0-9-]{4,62}[a-z0-9])?$/.test(slug)) return bad('slugInvalid');
+        if (!/^[a-z0-9][a-z0-9-]{4,62}[a-z0-9]$/.test(slug)) return bad('slugInvalid');
       }
       break;
     }

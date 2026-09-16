@@ -1,5 +1,5 @@
 import { hashSessionToken, type SessionData } from '../lib/account.ts';
-import { addDestination, createQr, validateDestination, type QrRecord, type QrStore } from './qr-service.ts';
+import { addDestination, createQr, currentQrDestination, validateDestination, type QrRecord, type QrStore } from './qr-service.ts';
 
 export type SessionLookup = {
   find(tokenHash: string): Promise<SessionData | null>;
@@ -38,21 +38,45 @@ async function currentUser(request: Request, dependencies: QrApiDependencies, no
   return { id: session.userId };
 }
 
-async function body(request: Request): Promise<Record<string, unknown> | null> {
+type BodyResult = { input: Record<string, unknown>; error?: never } | { input?: never; error: 'invalidRequest' | 'requestTooLarge' };
+const maxBodyBytes = 300_000;
+
+async function body(request: Request): Promise<BodyResult> {
   const length = Number(request.headers.get('content-length') ?? 0);
-  if (length > 16_384) return null;
+  if (!Number.isSafeInteger(length) || length < 0) return { error: 'invalidRequest' };
+  if (length > maxBodyBytes) return { error: 'requestTooLarge' };
+  if (!request.body) return { error: 'invalidRequest' };
+  const reader = request.body.getReader();
   try {
-    const value: unknown = await request.json();
-    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
-  } catch { return null; }
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBodyBytes) {
+        await reader.cancel();
+        return { error: 'requestTooLarge' };
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    const value: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? { input: value as Record<string, unknown> } : { error: 'invalidRequest' };
+  } catch { return { error: 'invalidRequest' }; }
+  finally { reader.releaseLock(); }
 }
 
-function responseRecord(qr: QrRecord) {
+async function responseRecord(qr: QrRecord, store: QrStore, now: Date) {
+  const destinationUrl = qr.kind === 'url' ? (await currentQrDestination(store, qr.id, now))?.destinationUrl ?? null : null;
   return {
     id: qr.id, workspaceId: qr.workspaceId, slug: qr.slug, kind: qr.kind,
     name: qr.name, status: qr.status, designJson: qr.designJson,
     folderId: qr.folderId, campaignId: qr.campaignId, expiresAt: qr.expiresAt,
-    createdAt: qr.createdAt, updatedAt: qr.updatedAt,
+    createdAt: qr.createdAt, updatedAt: qr.updatedAt, destinationUrl,
   };
 }
 
@@ -60,7 +84,8 @@ const statuses = new Set(['active', 'paused', 'expired', 'archived']);
 
 function qrId(url: URL): string | null {
   const match = url.pathname.match(/^\/api\/qr\/([^/]+)$/);
-  return match ? decodeURIComponent(match[1]) : null;
+  try { return match ? decodeURIComponent(match[1]) : null; }
+  catch { return null; }
 }
 
 export async function handleQrRequest(request: Request, dependencies: QrApiDependencies): Promise<Response> {
@@ -82,8 +107,12 @@ export async function handleQrRequest(request: Request, dependencies: QrApiDepen
       return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
     }
     if (request.method !== 'PATCH') return json({ error: 'methodNotAllowed' }, 405, { Allow: 'PATCH, DELETE' });
-    const input = await body(request);
-    if (!input) return json({ error: 'invalidRequest' }, 400);
+    const parsed = await body(request);
+    if (parsed.error) return json({ error: parsed.error }, parsed.error === 'requestTooLarge' ? 413 : 400);
+    const input = parsed.input;
+    if (input.name !== undefined && (typeof input.name !== 'string' || !input.name.trim())) return json({ error: 'invalidName' }, 400);
+    if (input.designJson !== undefined && typeof input.designJson !== 'string') return json({ error: 'invalidRequest' }, 400);
+    if (input.expiresAt !== undefined && input.expiresAt !== null && (typeof input.expiresAt !== 'string' || !Number.isFinite(Date.parse(input.expiresAt)))) return json({ error: 'invalidDates' }, 400);
     const nextStatus = input.status === undefined ? existing.status : input.status;
     if (typeof nextStatus !== 'string' || !statuses.has(nextStatus)) return json({ error: 'invalidStatus' }, 400);
     const updated: QrRecord = {
@@ -96,30 +125,39 @@ export async function handleQrRequest(request: Request, dependencies: QrApiDepen
     };
     if (!updated.name) return json({ error: 'invalidName' }, 400);
     if (input.destinationUrl !== undefined) {
-      if (typeof input.destinationUrl !== 'string') return json({ error: 'invalidDestination' }, 400);
+      if (existing.kind !== 'url' || typeof input.destinationUrl !== 'string') return json({ error: 'invalidDestination' }, 400);
       try { validateDestination(input.destinationUrl); } catch { return json({ error: 'invalidDestination' }, 400); }
     }
     await dependencies.qrs.updateQr(updated);
     if (typeof input.destinationUrl === 'string') {
-      await addDestination(dependencies.qrs, workspace.id, { qrCodeId: existing.id, destinationUrl: input.destinationUrl }, now);
+      const destinationUrl = validateDestination(input.destinationUrl);
+      const current = await currentQrDestination(dependencies.qrs, existing.id, now);
+      if (current?.destinationUrl !== destinationUrl) {
+        await addDestination(dependencies.qrs, workspace.id, { qrCodeId: existing.id, destinationUrl }, now);
+      }
     }
-    return json({ qrCode: responseRecord(updated) }, 200);
+    return json({ qrCode: await responseRecord(updated, dependencies.qrs, now) }, 200);
   }
 
   if (request.method === 'GET') {
     const records = await dependencies.qrs.listQrInWorkspace(workspace.id);
-    return json({ workspace, qrCodes: records.filter((record) => record.status !== 'archived').map(responseRecord) }, 200);
+    const qrCodes = await Promise.all(records.filter((record) => record.status !== 'archived').map((record) => responseRecord(record, dependencies.qrs, now)));
+    return json({ workspace, qrCodes }, 200);
   }
   if (request.method !== 'POST') return json({ error: 'methodNotAllowed' }, 405, { Allow: 'GET, POST' });
-  const input = await body(request);
-  if (!input || typeof input.slug !== 'string' || typeof input.kind !== 'string' || typeof input.name !== 'string') {
+  const parsed = await body(request);
+  if (parsed.error) return json({ error: parsed.error }, parsed.error === 'requestTooLarge' ? 413 : 400);
+  const input = parsed.input;
+  if (typeof input.slug !== 'string' || typeof input.kind !== 'string' || typeof input.name !== 'string') {
     return json({ error: 'invalidRequest' }, 400);
   }
+  if (!['url', 'text', 'contact'].includes(input.kind)) return json({ error: 'invalidKind' }, 400);
+  if (!input.name.trim()) return json({ error: 'invalidName' }, 400);
+  if (input.designJson !== undefined && typeof input.designJson !== 'string') return json({ error: 'invalidRequest' }, 400);
   try {
     // URL records need a destination; text/contact records keep their payload in designJson.
-    const destinationUrl = input.destinationUrl === undefined ? null : typeof input.destinationUrl === 'string' ? input.destinationUrl : null;
-    if (input.kind === 'url' && destinationUrl === null) return json({ error: 'invalidRequest' }, 400);
-    if (destinationUrl !== null) validateDestination(destinationUrl);
+    if (input.kind === 'url' ? typeof input.destinationUrl !== 'string' : input.destinationUrl !== undefined) return json({ error: 'invalidDestination' }, 400);
+    const destinationUrl = typeof input.destinationUrl === 'string' ? validateDestination(input.destinationUrl) : null;
     const qr = await createQr(dependencies.qrs, {
       workspaceId: workspace.id,
       id: typeof input.id === 'string' ? input.id : undefined,
@@ -131,10 +169,11 @@ export async function handleQrRequest(request: Request, dependencies: QrApiDepen
     if (destinationUrl !== null) {
       await addDestination(dependencies.qrs, workspace.id, { qrCodeId: qr.id, destinationUrl }, now);
     }
-    return json({ qrCode: responseRecord(qr) }, 201);
+    return json({ qrCode: await responseRecord(qr, dependencies.qrs, now) }, 201);
   } catch (error) {
     const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
-    if (code === 'invalidSlug' || code === 'invalidDestination' || code === 'invalidDates') return json({ error: code }, 400);
+    if (code === 'slugTaken') return json({ error: code }, 409);
+    if (code === 'invalidSlug' || code === 'invalidDestination' || code === 'invalidDates' || code === 'invalidKind' || code === 'invalidName') return json({ error: code }, 400);
     return json({ error: 'serverError' }, 500);
   }
 }

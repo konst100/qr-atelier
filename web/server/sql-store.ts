@@ -275,25 +275,15 @@ export class SqlScanStore implements ScanStore {
   }
 
   async record(scan: ScanRecord): Promise<void> {
-    const rows = await this.client.query(
-      `SELECT scans, device_mobile, device_desktop FROM scan_daily
-       WHERE qr_code_id = ? AND day = ? LIMIT 1`,
-      [scan.qrCodeId, scan.day],
-    );
-    if (rows[0]) {
-      const scans = numberValue(rows[0], 'scans') + 1;
-      const mobile = numberValue(rows[0], 'device_mobile') + (scan.device === 'mobile' ? 1 : 0);
-      const desktop = numberValue(rows[0], 'device_desktop') + (scan.device === 'desktop' ? 1 : 0);
-      await this.client.query(
-        `UPDATE scan_daily SET scans = ?, device_mobile = ?, device_desktop = ?
-         WHERE qr_code_id = ? AND day = ?`,
-        [scans, mobile, desktop, scan.qrCodeId, scan.day],
-      );
-      return;
-    }
+    // The database performs the increment atomically, including the first scan
+    // of a day. Reading then writing a new total loses simultaneous requests.
     await this.client.query(
       `INSERT INTO scan_daily (qr_code_id, day, scans, device_mobile, device_desktop)
-       VALUES (?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (qr_code_id, day) DO UPDATE SET
+         scans = scan_daily.scans + excluded.scans,
+         device_mobile = scan_daily.device_mobile + excluded.device_mobile,
+         device_desktop = scan_daily.device_desktop + excluded.device_desktop`,
       [scan.qrCodeId, scan.day, 1, scan.device === 'mobile' ? 1 : 0, scan.device === 'desktop' ? 1 : 0],
     );
   }

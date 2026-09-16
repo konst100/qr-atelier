@@ -25,7 +25,7 @@ test('SQLite runtime persists account, QR cabinet data, and dynamic destination 
     const listed = await runtime.handle(new Request('http://local.test/api/qr', { headers: { Cookie: cookie } }));
     assert.equal((await listed.json()).qrCodes.length, 1);
 
-    const firstRedirect = await runtime.handle(new Request('http://local.test/r/demo-qr'));
+    const firstRedirect = await runtime.handle(new Request('http://local.test/r/demo-qr', { headers: { 'User-Agent': 'Mozilla/5.0 (iPhone)' } }));
     assert.equal(firstRedirect.status, 302);
     assert.equal(firstRedirect.headers.get('Location'), 'https://example.com/first');
 
@@ -33,8 +33,11 @@ test('SQLite runtime persists account, QR cabinet data, and dynamic destination 
       method: 'PATCH', headers: { Cookie: cookie }, body: JSON.stringify({ destinationUrl: 'https://example.com/second' }),
     }));
     assert.equal(updated.status, 200);
-    const secondRedirect = await runtime.handle(new Request('http://local.test/r/demo-qr'));
+    const secondRedirect = await runtime.handle(new Request('http://local.test/r/demo-qr', { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0)' } }));
     assert.equal(secondRedirect.status, 302);
     assert.equal(secondRedirect.headers.get('Location'), 'https://example.com/second');
+    const stats = await runtime.handle(new Request(`http://local.test/api/qr/${qr.id}/stats`, { headers: { Cookie: cookie } }));
+    assert.equal(stats.status, 200);
+    assert.equal((await stats.json()).total, 2);
   } finally { runtime.close(); }
 });

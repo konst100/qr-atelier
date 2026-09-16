@@ -27,14 +27,20 @@ export async function handleRedirectRequest(request: Request, dependencies: Redi
     return new Response('Method Not Allowed', { status: 405, headers: { Allow: 'GET, HEAD' } });
   }
   let target: Awaited<ReturnType<typeof resolveQrTarget>>;
+  const now = dependencies.now?.() ?? new Date();
   try {
-    const now = dependencies.now?.() ?? new Date();
     target = await resolveQrTarget(dependencies.qrs, decodeURIComponent(match[1]), now);
-    if (target) await recordScan(dependencies.scans, target.qr.id, request, now);
   } catch {
     target = null;
   }
   if (!target) return missing();
+  if (request.method === 'GET') {
+    try {
+      await recordScan(dependencies.scans, target.qr.id, request, now);
+    } catch {
+      // A counter outage must not disable an already printed QR link.
+    }
+  }
   return new Response(null, {
     status: 302,
     headers: {

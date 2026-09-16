@@ -28,25 +28,36 @@ async function user(request: Request, dependencies: StatsApiDependencies, now: D
 }
 
 function validDay(value: string | null): value is string {
-  return !!value && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00.000Z`));
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  // Date.parse accepts overflows such as February 30 by moving into March.
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 export async function handleStatsRequest(request: Request, dependencies: StatsApiDependencies): Promise<Response> {
-  if (request.method !== 'GET') return json({ error: 'methodNotAllowed' }, 405);
+  if (request.method !== 'GET') {
+    const response = json({ error: 'methodNotAllowed' }, 405);
+    response.headers.set('Allow', 'GET');
+    return response;
+  }
   const url = new URL(request.url);
   const match = url.pathname.match(/^\/api\/qr\/([^/]+)\/stats$/);
   if (!match) return json({ error: 'notFound' }, 404);
   let qrId: string;
   try { qrId = decodeURIComponent(match[1]); } catch { return json({ error: 'notFound' }, 404); }
-  const now = dependencies.now?.() ?? new Date();
-  const userId = await user(request, dependencies, now);
-  if (!userId) return json({ error: 'unauthorized' }, 401);
-  const workspace = await dependencies.workspaces.defaultForUser(userId);
-  if (!workspace || !(await dependencies.qrs.getQrInWorkspace(workspace.id, qrId))) return json({ error: 'notFound' }, 404);
-  const defaultFrom = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const from = url.searchParams.get('from') ?? defaultFrom;
-  const to = url.searchParams.get('to') ?? now.toISOString().slice(0, 10);
-  if (!validDay(from) || !validDay(to) || from > to) return json({ error: 'invalidRange' }, 400);
-  const daily = await dependencies.scans.listDaily(qrId, from, to);
-  return json({ qrCodeId: qrId, from, to, total: daily.reduce((sum, item) => sum + item.scans, 0), daily }, 200);
+  try {
+    const now = dependencies.now?.() ?? new Date();
+    const userId = await user(request, dependencies, now);
+    if (!userId) return json({ error: 'unauthorized' }, 401);
+    const workspace = await dependencies.workspaces.defaultForUser(userId);
+    if (!workspace || !(await dependencies.qrs.getQrInWorkspace(workspace.id, qrId))) return json({ error: 'notFound' }, 404);
+    const defaultFrom = new Date(now.getTime() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const from = url.searchParams.get('from') ?? defaultFrom;
+    const to = url.searchParams.get('to') ?? now.toISOString().slice(0, 10);
+    if (!validDay(from) || !validDay(to) || from > to) return json({ error: 'invalidRange' }, 400);
+    const daily = await dependencies.scans.listDaily(qrId, from, to);
+    return json({ qrCodeId: qrId, from, to, total: daily.reduce((sum, item) => sum + item.scans, 0), daily }, 200);
+  } catch {
+    return json({ error: 'serviceUnavailable' }, 503);
+  }
 }

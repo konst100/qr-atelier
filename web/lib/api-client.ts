@@ -19,6 +19,7 @@ export type ApiQrCode = {
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
+  destinationUrl?: string | null;
 };
 
 export class ApiError extends Error {
@@ -78,4 +79,14 @@ export function updateRemoteQrCode(id: string, input: { name?: string; status?: 
 
 export function archiveRemoteQrCode(id: string) {
   return request<void>(`/api/qr/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export type QrStatistics = {
+  qrCodeId: string; from: string; to: string; total: number;
+  daily: Array<{ day: string; scans: number; deviceMobile: number; deviceDesktop: number }>;
+};
+
+export function getQrStatistics(id: string, from: string, to: string) {
+  const range = new URLSearchParams({ from, to });
+  return request<QrStatistics>(`/api/qr/${encodeURIComponent(id)}/stats?${range}`);
 }

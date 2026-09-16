@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { normalizeQrSvg, qrOptions, type QrShape } from '@/lib/qr';
 import { translations, type Language } from '@/lib/translations';
 
-type Props = { payload: string; color: string; shape: QrShape; logoDataUrl: string; language: Language; name: string; validation?: string; onMessage: (text: string) => void };
-export function QrPreview({ payload, color, shape, logoDataUrl, language, name, validation, onMessage }: Props) {
+type Props = { payload: string; color: string; shape: QrShape; logoDataUrl: string; language: Language; name: string; validation?: string; downloadBlocked?: boolean; onMessage: (text: string) => void };
+export function QrPreview({ payload, color, shape, logoDataUrl, language, name, validation, downloadBlocked = false, onMessage }: Props) {
   const mount = useRef<HTMLDivElement>(null);
   const instance = useRef<import('qr-code-styling').default | null>(null);
   const [readyKey, setReadyKey] = useState('');
@@ -37,7 +37,7 @@ export function QrPreview({ payload, color, shape, logoDataUrl, language, name, 
     return () => { cancelled = true; clearTimeout(timer); };
   }, [payload, color, shape, logoDataUrl, key]);
   async function download(extension: 'png' | 'svg') {
-    if (!ready || !instance.current || downloading) return;
+    if (!ready || !instance.current || downloading || downloadBlocked) return;
     setDownloading(true);
     try {
       const fileName = (name.trim() || 'qr-code').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-').slice(0, 80);
@@ -55,7 +55,7 @@ export function QrPreview({ payload, color, shape, logoDataUrl, language, name, 
     <div className="preview-bottom">
       <div className="status-line"><span className={ready ? 'status-dot' : 'status-dot inactive'} /><span>{ready ? t.ready : t.preview}</span><span className="resolution">1000 × 1000</span></div>
       {validation && <p className="validation" role="alert"><AlertCircle size={16} />{validation}</p>}
-      <div className="download-buttons"><Button className="primary-button" disabled={!ready || downloading} onClick={() => download('png')} aria-label={`${t.download} PNG`}><Download size={17} />PNG</Button><Button variant="outline" disabled={!ready || downloading} onClick={() => download('svg')} aria-label={`${t.download} SVG`}><Download size={17} />SVG</Button></div>
+      <div className="download-buttons"><Button className="primary-button" disabled={!ready || downloading || downloadBlocked} onClick={() => download('png')} aria-label={`${t.download} PNG`}><Download size={17} />PNG</Button><Button variant="outline" disabled={!ready || downloading || downloadBlocked} onClick={() => download('svg')} aria-label={`${t.download} SVG`}><Download size={17} />SVG</Button></div>
       <p className="file-hint">{t.fileHint}</p>
     </div>
   </aside>;

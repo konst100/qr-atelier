@@ -15,7 +15,11 @@ export async function handleAppRequest(request: Request, dependencies: AppRouter
   if (path.startsWith('/api/auth/')) return handleAuthRequest(request, dependencies.auth);
   if (path.startsWith('/api/qr/') && path.endsWith('/stats') && dependencies.stats) return handleStatsRequest(request, dependencies.stats);
   if (path === '/api/qr' || /^\/api\/qr\/[^/]+$/.test(path)) return handleQrRequest(request, dependencies.qr);
-  if (path.startsWith('/r/')) return handleRedirectRequest(request, { qrs: dependencies.qr.qrs, now: dependencies.qr.now });
+  if (path.startsWith('/r/')) return handleRedirectRequest(request, {
+    qrs: dependencies.qr.qrs,
+    scans: dependencies.stats?.scans,
+    now: dependencies.qr.now,
+  });
   return new Response(JSON.stringify({ error: 'notFound' }), {
     status: 404,
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
